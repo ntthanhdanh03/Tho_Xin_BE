@@ -14,4 +14,7 @@ export class AddApplicantDto {
 
   @IsNotEmpty()
   offeredPrice: string;
+
+  @IsNotEmpty()
+  note: string;
 }

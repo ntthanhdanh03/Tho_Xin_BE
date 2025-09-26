@@ -43,21 +43,31 @@ export class AppGateway
       );
     });
   }
+
   async handleConnection(client: Socket) {
     try {
-      const partnerId = client.handshake.query.partnerId as string;
+      const userId = client.handshake.query.userId as string;
+      const type = client.handshake.query.type as 'partner' | 'client';
+
       this.logger.log(`   - Socket ID: ${client.id}`);
-      this.logger.log(`   - Partner ID: ${partnerId}`);
-      if (partnerId) {
-        client.data.partnerId = partnerId;
-        await this.userService.updatePartnerProfile(partnerId, {
-          isOnline: true,
-        });
-        this.server.emit('partner_online', { partnerId });
-        this.logger.log(`✅ Partner ${partnerId} is now online`);
-        client.join(`partner_${partnerId}`);
-      } else {
-        this.logger.warn('⚠️ Connection without partnerId');
+      this.logger.log(`   - User ID: ${userId}`);
+      this.logger.log(`   - Type: ${type}`);
+
+      if (!userId || !type) {
+        this.logger.warn('⚠️ Connection missing userId or type');
+        return;
+      }
+
+      client.data.userId = userId;
+      client.data.type = type;
+
+      if (type === 'partner') {
+        await this.userService.updatePartnerProfile(userId, { isOnline: true });
+        this.logger.log(`✅ Partner ${userId} is now online`);
+        client.join(`partner_${userId}`);
+      } else if (type === 'client') {
+        this.logger.log(`✅ Client ${userId} connected`);
+        client.join(`client_${userId}`);
       }
     } catch (error) {
       this.logger.error('❌ Error in handleConnection:', error);
@@ -66,22 +76,15 @@ export class AppGateway
 
   async handleDisconnect(client: Socket) {
     try {
-      const partnerId = client.data.partnerId;
+      const { userId, type } = client.data;
 
-      this.logger.log(`🔌 Disconnection:`);
-      this.logger.log(`   - Socket ID: ${client.id}`);
-      this.logger.log(`   - Partner ID: ${partnerId}`);
+      this.logger.log(`🔌 Disconnection: Socket ID ${client.id}, Type ${type}`);
 
-      if (partnerId) {
-        // Cập nhật trạng thái offline
-        await this.userService.updatePartnerProfile(partnerId, {
+      if (type === 'partner' && userId) {
+        await this.userService.updatePartnerProfile(userId, {
           isOnline: false,
         });
-
-        // Emit sự kiện partner offline
-        this.server.emit('partner_offline', { partnerId });
-
-        this.logger.log(`❌ Partner ${partnerId} is now offline`);
+        this.logger.log(`❌ Partner ${userId} is now offline`);
       }
     } catch (error) {
       this.logger.error('❌ Error in handleDisconnect:', error);
@@ -91,11 +94,17 @@ export class AppGateway
   @OnEvent('order.created')
   handleNewOrder(payload: { order: OrderDocument; onlineUserIds: string[] }) {
     const { order, onlineUserIds } = payload;
-
     onlineUserIds.forEach((profileId) => {
       const id = profileId.toString ? profileId.toString() : profileId;
       this.server.to(`partner_${id}`).emit('new_order', order);
       this.logger.log(`📦 Sent new_order to partner_${id}`);
     });
+  }
+
+  @OnEvent('order.addApplicant')
+  handleAddApplicant(payload: { clientId: string[] }) {
+    const { clientId } = payload;
+    this.server.to(`client_${clientId}`).emit('order_addApplicant');
+    this.logger.log(`📦 Sent new_order to client_${clientId}`);
   }
 }

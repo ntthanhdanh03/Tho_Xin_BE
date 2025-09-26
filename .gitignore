@@ -47,3 +47,5 @@ pids
 
 # Diagnostic reports
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+src/config/thoixinproject-firebase-adminsdk-fbsvc-b6e894dd36.json

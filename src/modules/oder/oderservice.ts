@@ -44,75 +44,6 @@ export class OrderService {
     return createdOrder.save();
   }
 
-  // async createOrder(orderData: any) {
-  //   console.log('Bắt đầu tạo order với data:', orderData);
-
-  //   const order = await this.saveOrder(orderData);
-  //   console.log('Order đã được lưu:', order);
-
-  //   const typeService = order.typeService;
-  //   console.log('Type service của order:', typeService);
-
-  //   const FIELD = [
-  //     { key: 'electricity', name: 'Điện' },
-  //     { key: 'water', name: 'Nước' },
-  //     { key: 'locksmith', name: 'Khóa' },
-  //     { key: 'air_conditioning', name: 'Điện lạnh' },
-  //   ];
-
-  //   // Lấy tên hiển thị từ FIELD
-  //   const serviceField =
-  //     FIELD.find((f) => f.key === typeService)?.name || typeService;
-
-  //   try {
-  //     const partners = await this.partnerKYCModel.find({
-  //       choseField: typeService,
-  //     });
-  //     console.log(
-  //       'Tìm thấy partner phù hợp:',
-  //       partners.map((p) => p.userId),
-  //     );
-
-  //     if (!partners.length) return order;
-
-  //     const userIds = partners.map((p) => p.userId);
-  //     console.log('UserIds của partner:', userIds);
-
-  //     const installations = await this.installationModel.find({
-  //       idUsers: { $in: userIds },
-  //     });
-  //     console.log('Installations tìm thấy:', installations.length);
-
-  //     const tokens: string[] = [];
-  //     installations.forEach((inst) => {
-  //       inst.deviceToken.forEach((dt) => {
-  //         if (dt.token) {
-  //           tokens.push(dt.token);
-  //           console.log('Token thêm vào:', dt.token);
-  //         }
-  //       });
-  //     });
-
-  //     console.log('Tổng số token sẽ gửi:', tokens.length);
-
-  //     const message = `Có yêu cầu mới về ${serviceField}, hãy kiểm tra ngay!`;
-  //     for (const token of tokens) {
-  //       console.log('Gửi notification tới token:', token);
-  //       await this.notificationService.sendPushNotification(
-  //         token,
-  //         'Đơn hàng mới',
-  //         message,
-  //       );
-  //     }
-
-  //     console.log('Đã gửi xong tất cả notification');
-  //   } catch (error) {
-  //     console.error('Lỗi khi gửi notification:', error);
-  //   }
-
-  //   return order;
-  // }
-
   async createOrder(orderData: any) {
     console.log('Bắt đầu tạo order với data:', orderData);
 
@@ -130,12 +61,10 @@ export class OrderService {
       { key: 'air_conditioning', name: 'Điện lạnh' },
     ];
 
-    // Lấy tên hiển thị
     const serviceField =
       FIELD.find((f) => f.key === typeService)?.name || typeService;
 
     try {
-      // Lấy partner đã duyệt KYC và chọn field phù hợp
       const partnersKYC = await this.partnerKYCModel.find({
         choseField: typeService,
         // approved: 'APPROVED',
@@ -149,7 +78,6 @@ export class OrderService {
       const userIds = partnersKYC.map((p) => p.userId);
       console.log('UserIds partner KYC phù hợp:', userIds);
 
-      // Lọc partner online
       const onlinePartners = await this.partnerProfileModel.find({
         userId: { $in: userIds },
         isOnline: true,
@@ -166,10 +94,9 @@ export class OrderService {
 
       this.eventEmitter.emit('order.created', {
         order,
-        onlineUserIds, // array partner online mà bạn đã tính ra
+        onlineUserIds,
       });
 
-      // Lấy device token
       const installations = await this.installationModel.find({
         idUsers: { $in: onlineUserIds },
       });
@@ -185,7 +112,6 @@ export class OrderService {
 
       const message = `Có yêu cầu mới về ${serviceField}, hãy kiểm tra ngay!`;
 
-      // Gửi notification
       for (const token of tokens) {
         console.log('Gửi notification tới token:', token);
         await this.notificationService.sendPushNotification(
@@ -200,25 +126,6 @@ export class OrderService {
       console.error('Lỗi khi gửi notification:', error);
     }
 
-    return order;
-  }
-
-  async getOrders(clientId?: string): Promise<OrderDocument[]> {
-    const query = clientId ? { clientId } : {};
-    return this.orderModel.find(query).exec();
-  }
-
-  async getOrderById(id: string): Promise<OrderDocument> {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) throw new NotFoundException('Order not found');
-    return order;
-  }
-
-  async updateOrder(id: string, data: Partial<Order>): Promise<OrderDocument> {
-    const order = await this.orderModel
-      .findByIdAndUpdate(id, data, { new: true })
-      .exec();
-    if (!order) throw new NotFoundException('Order not found');
     return order;
   }
 
@@ -252,6 +159,32 @@ export class OrderService {
       name: dto.name,
       avatarUrl: dto.avatarUrl,
       offeredPrice: dto.offeredPrice,
+      note: dto.note,
+    });
+    const installations = await this.installationModel.find({
+      idUsers: { $in: order.clientId },
+    });
+
+    const tokens: string[] = [];
+    installations.forEach((inst) => {
+      inst.deviceToken.forEach((dt) => {
+        if (dt.token) tokens.push(dt.token);
+      });
+    });
+
+    const message = `Đã có thợ báo giá cho yêu cầu của bạn, hãy kiểm tra ngay!`;
+
+    for (const token of tokens) {
+      console.log('Gửi notification tới token:', token);
+      await this.notificationService.sendPushNotification(
+        token,
+        'Đơn hàng mới',
+        message,
+      );
+    }
+
+    this.eventEmitter.emit('order.addApplicant', {
+      clientId: order.clientId,
     });
 
     return order.save();
@@ -308,5 +241,24 @@ export class OrderService {
   /** Lấy tất cả order theo partner */
   async getOrdersByPartner(partnerId: string): Promise<OrderDocument[]> {
     return this.orderModel.find({ 'applicants.partnerId': partnerId }).exec();
+  }
+
+  async getOrders(clientId?: string): Promise<OrderDocument[]> {
+    const query = clientId ? { clientId } : {};
+    return this.orderModel.find(query).exec();
+  }
+
+  async getOrderById(id: string): Promise<OrderDocument> {
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  async updateOrder(id: string, data: Partial<Order>): Promise<OrderDocument> {
+    const order = await this.orderModel
+      .findByIdAndUpdate(id, data, { new: true })
+      .exec();
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
   }
 }

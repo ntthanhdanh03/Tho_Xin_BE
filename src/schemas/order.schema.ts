@@ -59,6 +59,7 @@ export class Order {
         name: String,
         avatarUrl: String,
         offeredPrice: String,
+        note: String,
       },
     ],
     default: [],
@@ -68,6 +69,7 @@ export class Order {
     name: string;
     avatarUrl: string;
     offeredPrice: string;
+    note: string;
   }[];
 }
 
