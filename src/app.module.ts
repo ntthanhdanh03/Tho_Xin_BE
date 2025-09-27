@@ -10,6 +10,7 @@ import { UserModule } from './modules/user/user.module';
 import { NotificationModule } from './modules/notication/notification.module';
 import { AppGateway } from './app.gateway';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     UserModule,
     NotificationModule,
     OrderModule,
+    ChatModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

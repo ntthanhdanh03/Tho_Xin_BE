@@ -1,3 +1,4 @@
+import { ChatRoomService } from './../chat/chat.service';
 import { NotificationService } from './../notication/notification.service';
 import {
   Injectable,
@@ -37,6 +38,7 @@ export class OrderService {
     @InjectModel(Installation.name)
     private installationModel: Model<InstallationDocument>,
     private readonly notificationService: NotificationService,
+    private readonly ChatRoomService: ChatRoomService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
   private async saveOrder(orderData: any): Promise<OrderDocument> {
@@ -45,9 +47,14 @@ export class OrderService {
   }
 
   async createOrder(orderData: any) {
-    console.log('Bắt đầu tạo order với data:', orderData);
+    const existingPendingOrder = await this.orderModel.findOne({
+      clientId: orderData.clientId,
+      status: OrderStatus.PENDING,
+    });
 
-    // Lưu order vào database
+    if (existingPendingOrder) {
+      throw new BadRequestException('Bạn đang có một dịch vụ chờ xử lý.');
+    }
     const order = await this.saveOrder(orderData);
     console.log('Order đã được lưu:', order);
 
@@ -108,8 +115,6 @@ export class OrderService {
         });
       });
 
-      console.log('Tổng số token sẽ gửi:', tokens.length);
-
       const message = `Có yêu cầu mới về ${serviceField}, hãy kiểm tra ngay!`;
 
       for (const token of tokens) {
@@ -135,34 +140,52 @@ export class OrderService {
   ): Promise<OrderDocument> {
     const order = await this.getOrderById(orderId);
 
+    // ❌ Kiểm tra trạng thái không cho apply
     if ([OrderStatus.COMPLETED, OrderStatus.CANCELLED].includes(order.status)) {
       throw new BadRequestException(
-        'Cannot apply to a completed or cancelled order',
+        'Không thể báo giá cho đơn đã hoàn thành hoặc đã huỷ',
       );
     }
 
+    // ❌ Kiểm tra loại đơn không phải dạng chọn thợ
     if (order.typeOder !== OrderType.SELECT) {
-      throw new BadRequestException(
-        'Cannot add applicants to non-select order',
-      );
+      throw new BadRequestException('Đơn hàng không hỗ trợ chọn thợ');
     }
 
+    // ❌ Kiểm tra partner đã apply chưa
     const exists = order.applicants.some(
       (a) => a.partnerId.toString() === dto.partnerId,
     );
     if (exists) {
-      throw new BadRequestException('Partner has already applied');
+      throw new BadRequestException('Bạn đã báo giá đơn này rồi');
     }
 
+    // ✅ Tạo ChatRoom
+    let chatRoomId: string | null = null;
+    try {
+      const chatRoom = await this.ChatRoomService.create(
+        order._id.toString(),
+        order.clientId.toString(),
+        dto.partnerId,
+      );
+      chatRoomId = chatRoom?._id?.toString();
+    } catch (err) {
+      console.error('❌ Không thể tạo phòng chat:', err);
+    }
+
+    // ✅ Thêm applicant vào đơn
     order.applicants.push({
       partnerId: new Types.ObjectId(dto.partnerId),
       name: dto.name,
       avatarUrl: dto.avatarUrl,
       offeredPrice: dto.offeredPrice,
       note: dto.note,
+      roomId: chatRoomId ? new Types.ObjectId(chatRoomId) : undefined,
     });
+
+    // ✅ Gửi notification cho client
     const installations = await this.installationModel.find({
-      idUsers: { $in: order.clientId },
+      idUsers: { $in: [order.clientId] },
     });
 
     const tokens: string[] = [];
@@ -183,12 +206,87 @@ export class OrderService {
       );
     }
 
+    // ✅ Emit event socket để client reload danh sách đơn
     this.eventEmitter.emit('order.addApplicant', {
       clientId: order.clientId,
     });
 
+    // ✅ Lưu và trả về order mới
     return order.save();
   }
+
+  // async addApplicant(
+  //   orderId: string,
+  //   dto: AddApplicantDto,
+  // ): Promise<OrderDocument> {
+  //   const order = await this.getOrderById(orderId);
+
+  //   if ([OrderStatus.COMPLETED, OrderStatus.CANCELLED].includes(order.status)) {
+  //     throw new BadRequestException(
+  //       'Cannot apply to a completed or cancelled order',
+  //     );
+  //   }
+
+  //   if (order.typeOder !== OrderType.SELECT) {
+  //     throw new BadRequestException(
+  //       'Cannot add applicants to non-select order',
+  //     );
+  //   }
+
+  //   const exists = order.applicants.some(
+  //     (a) => a.partnerId.toString() === dto.partnerId,
+  //   );
+  //   if (exists) {
+  //     throw new BadRequestException('Partner has already applied');
+  //   }
+
+  //   order.applicants.push({
+  //     partnerId: new Types.ObjectId(dto.partnerId),
+  //     name: dto.name,
+  //     avatarUrl: dto.avatarUrl,
+  //     offeredPrice: dto.offeredPrice,
+  //     note: dto.note,
+  //   });
+
+  //   try {
+  //     await this.ChatRoomService.create(
+  //       order._id.toString(),
+  //       order.clientId.toString(),
+  //       dto.partnerId,
+  //     );
+  //   } catch (err) {
+  //     console.error('❌ Không thể tạo chat room:', err);
+  //     // Có thể không throw lỗi, để không ảnh hưởng quá trình apply
+  //   }
+
+  //   const installations = await this.installationModel.find({
+  //     idUsers: { $in: order.clientId },
+  //   });
+
+  //   const tokens: string[] = [];
+  //   installations.forEach((inst) => {
+  //     inst.deviceToken.forEach((dt) => {
+  //       if (dt.token) tokens.push(dt.token);
+  //     });
+  //   });
+
+  //   const message = `Đã có thợ báo giá cho yêu cầu của bạn, hãy kiểm tra ngay!`;
+
+  //   for (const token of tokens) {
+  //     console.log('Gửi notification tới token:', token);
+  //     await this.notificationService.sendPushNotification(
+  //       token,
+  //       'Đơn hàng mới',
+  //       message,
+  //     );
+  //   }
+
+  //   this.eventEmitter.emit('order.addApplicant', {
+  //     clientId: order.clientId,
+  //   });
+
+  //   return order.save();
+  // }
 
   async selectApplicant(
     orderId: string,

@@ -13,6 +13,7 @@ import {
   PartnerProfile,
   PartnerProfileSchema,
 } from 'src/schemas/partner-profile.schema';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import {
       { name: PartnerProfile.name, schema: PartnerProfileSchema },
     ]),
     NotificationModule,
+    ChatModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],

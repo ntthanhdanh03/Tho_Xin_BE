@@ -60,6 +60,7 @@ export class Order {
         avatarUrl: String,
         offeredPrice: String,
         note: String,
+        roomId: { type: Types.ObjectId, ref: 'ChatRoom' },
       },
     ],
     default: [],
@@ -70,6 +71,7 @@ export class Order {
     avatarUrl: string;
     offeredPrice: string;
     note: string;
+    roomId?: Types.ObjectId;
   }[];
 }
 

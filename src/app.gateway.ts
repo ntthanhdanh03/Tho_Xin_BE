@@ -13,6 +13,7 @@ import { UserService } from './modules/user/user.service';
 import { Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { OrderDocument } from './schemas/order.schema';
+import { SendMessageDto } from './modules/chat/dto/send-message.dto';
 
 @WebSocketGateway({
   cors: {
@@ -106,5 +107,33 @@ export class AppGateway
     const { clientId } = payload;
     this.server.to(`client_${clientId}`).emit('order_addApplicant');
     this.logger.log(`📦 Sent new_order to client_${clientId}`);
+  }
+
+  @OnEvent('chat.sendMessage')
+  handleSendMessage(dto: SendMessageDto) {
+    const {
+      roomId,
+      senderId,
+      receiverId,
+      senderType,
+      content,
+      type,
+      imageUrl,
+      orderId,
+    } = dto;
+
+    const receiverRoom =
+      senderType === 'client'
+        ? `partner_${receiverId}`
+        : `client_${receiverId}`;
+
+    const messagePayload = {
+      roomId,
+      orderId,
+    };
+
+    // Gửi socket tới người nhận
+    this.server.to(receiverRoom).emit('chat.newMessage', messagePayload);
+    this.logger.log(`📨 Sent message to ${receiverRoom}`);
   }
 }
