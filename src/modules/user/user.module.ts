@@ -9,6 +9,10 @@ import {
 } from 'src/schemas/partner-profile.schema';
 import { PartnerKYC, PartnerKYCSchema } from 'src/schemas/partner-kyc.schema';
 import { Client, ClientSchema } from 'src/schemas/client.schema';
+import {
+  PartnerLocation,
+  PartnerLocationSchema,
+} from 'src/schemas/partner-location.schema';
 
 @Module({
   imports: [
@@ -17,6 +21,7 @@ import { Client, ClientSchema } from 'src/schemas/client.schema';
       { name: PartnerProfile.name, schema: PartnerProfileSchema },
       { name: PartnerKYC.name, schema: PartnerKYCSchema },
       { name: Client.name, schema: ClientSchema },
+      { name: PartnerLocation.name, schema: PartnerLocationSchema },
     ]),
   ],
   controllers: [UserController],

@@ -1,4 +1,3 @@
-// dto/create-installation.dto.ts
 import { IsNotEmpty, IsString } from 'class-validator';
 
 export class DeviceTokenDto {

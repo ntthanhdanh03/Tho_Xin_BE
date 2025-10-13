@@ -16,6 +16,10 @@ import {
   Installation,
   InstallationSchema,
 } from 'src/schemas/create-installation.schema';
+import {
+  PartnerLocation,
+  PartnerLocationSchema,
+} from 'src/schemas/partner-location.schema';
 
 @Module({
   imports: [
@@ -25,6 +29,7 @@ import {
       { name: PartnerKYC.name, schema: PartnerKYCSchema },
       { name: Client.name, schema: ClientSchema },
       { name: Installation.name, schema: InstallationSchema },
+      { name: PartnerLocation.name, schema: PartnerLocationSchema },
     ]),
     JwtModule.register({
       secret: jwtConfig.secret,

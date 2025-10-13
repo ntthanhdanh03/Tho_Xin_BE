@@ -16,6 +16,9 @@ export class PartnerProfile {
   isOnline: boolean;
 
   @Prop({ default: false })
+  isWorking: boolean;
+
+  @Prop({ default: false })
   isLock: boolean;
 
   @Prop({ type: Date, default: null })

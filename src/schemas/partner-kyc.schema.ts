@@ -4,9 +4,9 @@ import { Document, Types } from 'mongoose';
 export type PartnerKYCDocument = PartnerKYC & Document;
 
 export enum KycApprovalStatus {
-  PENDING = 'PENDING', // chưa gửi hồ sơ
-  WAITING = 'WAITING', // chờ duyệt
-  APPROVED = 'APPROVED', // đã duyệt
+  PENDING = 'PENDING',
+  WAITING = 'WAITING',
+  APPROVED = 'APPROVED',
 }
 
 @Schema({ timestamps: true, strict: false })

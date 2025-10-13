@@ -17,6 +17,11 @@ export class ChatController {
     );
   }
 
+  @Get('messages/applicant/:applicantId')
+  async getMessagesByApplicant(@Param('applicantId') applicantId: string) {
+    return this.chatRoomService.getMessagesByApplicant(applicantId);
+  }
+
   @Get('room/:orderId')
   async getRoomsByOrder(@Param('orderId') orderId: string) {
     return this.chatRoomService.findByOrder(orderId);

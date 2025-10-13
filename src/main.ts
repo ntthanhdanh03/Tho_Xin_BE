@@ -11,7 +11,6 @@ async function bootstrap() {
 
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
-  // Logging middleware để debug requests Socket.IO
   app.use((req, res, next) => {
     if (req.url.includes('/socket.io/')) {
       logger.log(`🔌 Socket.IO request: ${req.method} ${req.url}`);

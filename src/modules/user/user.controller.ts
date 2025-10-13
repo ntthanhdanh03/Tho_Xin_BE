@@ -13,7 +13,6 @@ import {
 import { UserService } from './user.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UpdatePartnerKycDto } from './dto/update-partner-kyc.dto';
-// import { UpdatePartnerProfileDto } from './dto/update-partner-profile.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -39,27 +38,27 @@ export class UserController {
     return this.userService.findPartners(keyword);
   }
 
-  @Patch(':id')
-  async updateUser(@Param('id') userId: string, @Body() dto: UpdateUserDto) {
-    return this.userService.updateUser(userId, dto);
+  @Get('location/:userId')
+  async getLocation(@Param('userId') userId: string) {
+    return this.userService.getByUserId(userId);
   }
 
-  // @Patch('partner-profile/:partnerProfileId')
-  // async updatePartnerProfile(
-  //   @Param('partnerProfileId') partnerProfileId: string,
-  //   @Body() dto: UpdatePartnerProfileDto,
-  // ) {
-  //   return this.userService.updatePartnerProfile(partnerProfileId, dto);
-  // }
-
-  @Patch(':partnerProfileId/online')
-  async updateOnline(
-    @Param('partnerProfileId') partnerProfileId: string,
-    @Body() dto: { isOnline: boolean },
+  @Patch('location')
+  async updateLocation(
+    @Body()
+    body: {
+      userId: string;
+      latitude: number;
+      longitude: number;
+      clientId?: string;
+    },
   ) {
-    return this.userService.updatePartnerProfile(partnerProfileId, {
-      isOnline: dto.isOnline,
-    });
+    return this.userService.updateLocation(
+      body.userId,
+      body.latitude,
+      body.longitude,
+      body.clientId,
+    );
   }
 
   @Patch('partner-kyc/:kycId')
@@ -77,6 +76,17 @@ export class UserController {
   ) {
     return this.userService.updateClient(userId, dto);
   }
+
+  @Patch(':partnerProfileId/online')
+  async updateOnline(
+    @Param('partnerProfileId') partnerProfileId: string,
+    @Body() dto: { isOnline: boolean },
+  ) {
+    return this.userService.updatePartnerProfile(partnerProfileId, {
+      isOnline: dto.isOnline,
+    });
+  }
+
   @Post('upload-kyc/:field')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -111,10 +121,15 @@ export class UserController {
   ) {
     if (!file) throw new BadRequestException('Chưa chọn file');
 
-    const imageUrl = `http://192.168.1.2:3000/uploads/kyc/${field}/${file.filename}`;
+    const imageUrl = `http://192.168.1.9:3000/uploads/kyc/${field}/${file.filename}`;
     return {
       message: 'Upload thành công',
       url: imageUrl,
     };
+  }
+
+  @Patch(':id')
+  async updateUser(@Param('id') userId: string, @Body() dto: UpdateUserDto) {
+    return this.userService.updateUser(userId, dto);
   }
 }

@@ -105,22 +105,25 @@ export class AppGateway
   @OnEvent('order.addApplicant')
   handleAddApplicant(payload: { clientId: string[] }) {
     const { clientId } = payload;
-    this.server.to(`client_${clientId}`).emit('order_addApplicant');
+    this.server.to(`client_${clientId}`).emit('order_addApplicant', clientId);
     this.logger.log(`📦 Sent new_order to client_${clientId}`);
+  }
+
+  @OnEvent('order.selectApplicant')
+  handleSelectApplicant(payload: { partnerId: string; appointment: string }) {
+    console.log('📩 [order.selectApplicant] Event nhận được:', payload);
+
+    const { partnerId, appointment } = payload;
+    this.server
+      .to(`partner_${partnerId}`)
+      .emit('select_applicant', appointment);
+
+    console.log(`✅ Đã emit 'select_applicant' cho partner_${partnerId}`);
   }
 
   @OnEvent('chat.sendMessage')
   handleSendMessage(dto: SendMessageDto) {
-    const {
-      roomId,
-      senderId,
-      receiverId,
-      senderType,
-      content,
-      type,
-      imageUrl,
-      orderId,
-    } = dto;
+    const { roomId, receiverId, senderType, orderId } = dto;
 
     const receiverRoom =
       senderType === 'client'
@@ -132,8 +135,120 @@ export class AppGateway
       orderId,
     };
 
-    // Gửi socket tới người nhận
     this.server.to(receiverRoom).emit('chat.newMessage', messagePayload);
     this.logger.log(`📨 Sent message to ${receiverRoom}`);
+  }
+
+  @OnEvent('appointment.UpdateStatus')
+  handleAppointmentUpdate(payload: {
+    clientId?: string;
+    partnerId?: string;
+    appointment: any;
+  }) {
+    console.log('📩 [appointment.UpdateStatus] Event nhận được:', payload);
+
+    const { clientId, partnerId, appointment } = payload;
+
+    if (partnerId) {
+      this.server
+        .to(`partner_${partnerId}`)
+        .emit('appointment_updated', appointment);
+      console.log(`✅ Đã emit tới partner_${partnerId}`);
+    }
+
+    if (clientId) {
+      this.server
+        .to(`client_${clientId}`)
+        .emit('appointment_updated', appointment);
+      console.log(`✅ Đã emit tới client_${clientId}`);
+    }
+  }
+
+  @OnEvent('location.update')
+  handlePartnerLocationUpdate(payload: {
+    clientId: string;
+    partnerId: string;
+    latitude: number;
+    longitude: number;
+  }) {
+    console.log('📡 Received location update event:', payload);
+
+    this.server
+      .to(`client_${payload.clientId}`)
+      .emit('partner.locationUpdate', {
+        partnerId: payload.partnerId,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+      });
+
+    console.log(`📤 Emitted location to client_${payload.clientId}:`, {
+      partnerId: payload.partnerId,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+    });
+  }
+  @OnEvent('transaction.topUpSuccess')
+  handleTopUpSuccess(payload: {
+    userId: string;
+    amount: number;
+    newBalance: number;
+    timestamp: number;
+  }) {
+    this.logger.log('💰 [transaction.topUpSuccess] Event nhận được:', payload);
+
+    const { userId, amount, newBalance, timestamp } = payload;
+    this.server.to(`partner_${userId}`).emit('transaction.top_up.success', {
+      amount,
+      newBalance,
+      timestamp,
+      message: 'Nạp tiền thành công!',
+    });
+    this.logger.log(
+      `✅ Đã emit 'topup_success' tới partner_${userId} - Số dư mới: ${newBalance}`,
+    );
+  }
+
+  @OnEvent('transaction.paid_appointment.success')
+  handlePaidAppointmentSuccess(payload: {
+    appointmentId: string;
+    clientId: string;
+    partnerId: string;
+    amount: number;
+    timestamp: number;
+  }) {
+    const { appointmentId, clientId, partnerId, amount, timestamp } = payload;
+
+    this.logger.log(
+      '💰 [transaction.paid_appointment.success] Event nhận được:',
+      payload,
+    );
+
+    // Emit tới partner
+    this.server
+      .to(`partner_${partnerId}`)
+      .emit('transaction.paid_appointment.success', {
+        appointmentId,
+        amount,
+        timestamp,
+        message: 'Thanh toán hoàn tất!',
+      });
+
+    this.logger.log(
+      `✅ Đã emit 'transaction.paid_appointment.success' tới partner_${partnerId} - Số tiền: ${amount}`,
+    );
+
+    // Emit tới client
+    this.server
+      .to(`client_${clientId}`)
+      .emit('transaction.paid_appointment.success', {
+        appointmentId,
+        amount,
+        timestamp,
+        message: 'Thanh toán hoàn tất!',
+      });
+
+    this.logger.log(
+      `✅ Đã emit 'transaction.paid_appointment.success' tới client_${clientId} - Số tiền: ${amount}`,
+    );
   }
 }

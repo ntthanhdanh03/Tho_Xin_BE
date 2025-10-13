@@ -5,7 +5,6 @@ import { join } from 'path';
 @Injectable()
 export class NotificationService {
   constructor() {
-    // Chỉ init 1 lần
     if (!admin.apps.length) {
       const serviceAccount = require(
         join(

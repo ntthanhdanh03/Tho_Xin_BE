@@ -26,6 +26,10 @@ import {
   Installation,
   InstallationDocument,
 } from 'src/schemas/create-installation.schema';
+import {
+  PartnerLocation,
+  PartnerLocationDocument,
+} from 'src/schemas/partner-location.schema';
 
 @Injectable()
 export class AuthService {
@@ -36,6 +40,8 @@ export class AuthService {
     @InjectModel(PartnerKYC.name)
     private partnerKYCModel: Model<PartnerKYCDocument>,
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
+    @InjectModel(PartnerLocation.name)
+    private partnerLocationModel: Model<PartnerLocationDocument>,
     @InjectModel(Installation.name)
     private readonly installationModel: Model<InstallationDocument>,
     private jwtService: JwtService,
@@ -77,6 +83,12 @@ export class AuthService {
       if (dto.role === 'partner') {
         await this.partnerProfileModel.create({ userId: user._id });
         await this.partnerKYCModel.create({ userId: user._id });
+        await this.partnerLocationModel.create({
+          userId: user._id,
+          latitude: 0,
+          longitude: 0,
+          isActive: false,
+        });
       } else if (dto.role === 'client') {
         await this.clientModel.create({ userId: user._id });
       }

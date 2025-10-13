@@ -1,4 +1,4 @@
-import { OrderModule } from './modules/oder/oder.module';
+import { OrderModule } from './modules/order/order.module';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -11,6 +11,8 @@ import { NotificationModule } from './modules/notication/notification.module';
 import { AppGateway } from './app.gateway';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ChatModule } from './modules/chat/chat.module';
+import { AppointmentModule } from './modules/appointment/appointment.module';
+import { TransactionModule } from './modules/transaction/transaction.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { ChatModule } from './modules/chat/chat.module';
     NotificationModule,
     OrderModule,
     ChatModule,
+    AppointmentModule,
+    TransactionModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

@@ -10,17 +10,47 @@ import {
   Installation,
   InstallationDocument,
 } from 'src/schemas/create-installation.schema';
+import { Order, OrderDocument } from 'src/schemas/order.schema';
 
 @Injectable()
 export class ChatRoomService {
   constructor(
     @InjectModel(ChatRoom.name) private chatRoomModel: Model<ChatRoomDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Installation.name)
     private installationModel: Model<InstallationDocument>,
     private readonly notificationService: NotificationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  async getMessagesByApplicant(applicantId: string) {
+    const orders = await this.orderModel
+      .find({
+        status: { $in: ['pending', 'completed'] },
+        'applicants.partnerId': new Types.ObjectId(applicantId),
+      })
+      .lean();
+
+    if (!orders.length) {
+      return { rooms: [], messages: [] };
+    }
+
+    const orderIds = orders.map((o) => o._id);
+
+    const rooms = await this.chatRoomModel
+      .find({ orderId: { $in: orderIds } })
+      .lean();
+
+    const messages = await this.messageModel
+      .find({ orderId: { $in: orderIds } })
+      .lean();
+
+    return {
+      rooms,
+      messages,
+    };
+  }
 
   async create(orderId: string, clientId: string, partnerId: string) {
     const created = await this.chatRoomModel.create({
@@ -41,21 +71,14 @@ export class ChatRoomService {
   }
 
   async sendMessage(dto: SendMessageDto) {
-    console.log('➡️ Bắt đầu gửi tin nhắn với DTO:', dto);
-
-    // Lưu tin nhắn vào DB trước
     const result = await this.messageModel.create(dto);
-    console.log('✅ Đã lưu tin nhắn');
 
-    // Emit event sau khi lưu xong
     this.eventEmitter.emit('chat.sendMessage', result);
 
-    // Tìm installations của user
     const installations = await this.installationModel.find({
       idUsers: dto.receiverId,
     });
 
-    // Thu thập device tokens
     const tokens: string[] = [];
     installations.forEach((inst) => {
       inst.deviceToken.forEach((dt) => {
@@ -63,15 +86,12 @@ export class ChatRoomService {
       });
     });
 
-    console.log(`🎯 Tìm thấy ${tokens.length} device tokens`);
-
-    // Gửi push notifications
     const message = `Có một tin nhắn từ Thợ, hãy kiểm tra ngay!`;
     for (const token of tokens) {
       try {
         await this.notificationService.sendPushNotification(
           token,
-          'Đơn hàng mới',
+          'Tin nhắn mới',
           message,
         );
       } catch (error) {
@@ -84,7 +104,29 @@ export class ChatRoomService {
 
   async getMessagesByOrder(orderId: string) {
     const messages = await this.messageModel.find({ orderId });
-    console.log(`Fetched messages for orderId=${orderId}:`, messages);
     return messages;
+  }
+  async deleteByOrderAndPartner(orderId: string, partnerId: string) {
+    try {
+      const deletedRoom = await this.chatRoomModel.findOneAndDelete({
+        orderId: new Types.ObjectId(orderId),
+        partnerId: new Types.ObjectId(partnerId),
+      });
+
+      if (deletedRoom) {
+        await this.messageModel.deleteMany({
+          orderId: new Types.ObjectId(orderId),
+          $or: [
+            { senderId: new Types.ObjectId(partnerId) },
+            { receiverId: new Types.ObjectId(partnerId) },
+          ],
+        });
+      }
+
+      return deletedRoom;
+    } catch (error) {
+      console.error('❌ Lỗi khi xóa chatroom:', error);
+      throw error;
+    }
   }
 }

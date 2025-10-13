@@ -10,6 +10,7 @@ import {
   Installation,
   InstallationSchema,
 } from 'src/schemas/create-installation.schema';
+import { Order, OrderSchema } from 'src/schemas/order.schema';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import {
       { name: ChatRoom.name, schema: ChatRoomSchema },
       { name: Message.name, schema: MessageSchema },
       { name: Installation.name, schema: InstallationSchema },
+      { name: Order.name, schema: OrderSchema },
     ]),
     NotificationModule,
   ],

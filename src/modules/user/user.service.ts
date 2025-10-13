@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from 'src/schemas/user.schema';
@@ -17,9 +18,16 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdatePartnerKycDto } from './dto/update-partner-kyc.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UpdatePartnerOnlineDto } from './dto/update-partner-online.dto';
+import {
+  PartnerLocation,
+  PartnerLocationDocument,
+} from 'src/schemas/partner-location.schema';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(PartnerProfile.name)
@@ -28,6 +36,9 @@ export class UserService {
     private partnerKYCModel: Model<PartnerKYCDocument>,
     @InjectModel(Client.name)
     private clientModel: Model<ClientDocument>,
+    @InjectModel(PartnerLocation.name)
+    private partnerLocationModel: Model<PartnerLocationDocument>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findPartners(keyword?: string) {
@@ -93,12 +104,6 @@ export class UserService {
     dto: UpdatePartnerOnlineDto,
   ) {
     try {
-      console.log(
-        'partnerUserId:',
-        partnerUserId,
-        'length:',
-        partnerUserId.length,
-      );
       const userObjectId = new Types.ObjectId(partnerUserId);
 
       const profile = await this.partnerProfileModel.findOne({
@@ -118,6 +123,186 @@ export class UserService {
       return { updateOnline: true, dto };
     } catch (error) {
       throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  async getByUserId(userId: string) {
+    const location = await this.partnerLocationModel.findOne({
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!location) throw new NotFoundException('Partner location not found');
+    return location;
+  }
+
+  async updateLocation(
+    userId: string,
+    latitude: number,
+    longitude: number,
+    clientId?: string,
+  ) {
+    const updated = await this.partnerLocationModel.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId) },
+      {
+        latitude,
+        longitude,
+        isActive: true,
+        lastUpdated: new Date(),
+      },
+      { upsert: true, new: true },
+    );
+
+    if (clientId) {
+      this.eventEmitter.emit('location.update', {
+        clientId,
+        partnerId: userId,
+        latitude,
+        longitude,
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Cập nhật vị trí thành công',
+      data: updated,
+    };
+  }
+
+  async addBalanceToPartner(userId: string, amount: number) {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
+        { userId: userObjectId },
+        { $inc: { balance: amount } },
+        { new: true },
+      );
+
+      if (!updatedProfile) {
+        this.logger.error(
+          `❌ Không tìm thấy PartnerProfile với userId ${userId}`,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `💰 Đã cộng ${amount}đ cho user ${userId}. Số dư mới: ${updatedProfile.balance}`,
+      );
+
+      return updatedProfile;
+    } catch (error) {
+      this.logger.error(`❌ Lỗi khi cập nhật số dư: ${error.message}`);
+      return null;
+    }
+  }
+
+  async deductBalanceFromPartner(userId: string, amount: number) {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+
+      const profile = await this.partnerProfileModel.findOne({
+        userId: userObjectId,
+      });
+      if (!profile) {
+        this.logger.error(
+          `❌ Không tìm thấy PartnerProfile với userId ${userId}`,
+        );
+        return null;
+      }
+
+      if (profile.balance < amount) {
+        this.logger.warn(
+          `⚠️ User ${userId} không đủ số dư. Hiện có ${profile.balance}, cần ${amount}`,
+        );
+        return null;
+      }
+
+      const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
+        { userId: userObjectId },
+        { $inc: { balance: -amount } },
+        { new: true },
+      );
+
+      this.logger.log(
+        `💸 Đã trừ ${amount}đ khỏi user ${userId}. Số dư mới: ${updatedProfile.balance}`,
+      );
+
+      return updatedProfile;
+    } catch (error) {
+      this.logger.error(`❌ Lỗi khi trừ tiền: ${error.message}`);
+      return null;
+    }
+  }
+
+  async addBalanceWithPercent(userId: string, amount: number, percent: number) {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const actualAmount = Math.floor(amount * percent);
+
+      const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
+        { userId: userObjectId },
+        { $inc: { balance: actualAmount } },
+        { new: true },
+      );
+
+      if (!updatedProfile) {
+        this.logger.error(
+          `❌ Không tìm thấy PartnerProfile với userId ${userId}`,
+        );
+        return null;
+      }
+
+      this.logger.log(
+        `💰 Đã cộng ${actualAmount}đ (${percent * 100}% của ${amount}đ) cho user ${userId}. Số dư mới: ${updatedProfile.balance}`,
+      );
+
+      return updatedProfile;
+    } catch (error) {
+      this.logger.error(`❌ Lỗi khi cộng tiền có %: ${error.message}`);
+      return null;
+    }
+  }
+
+  async deductBalanceWithPercent(
+    userId: string,
+    amount: number,
+    percent: number,
+  ) {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const actualAmount = Math.floor(amount * percent);
+
+      const profile = await this.partnerProfileModel.findOne({
+        userId: userObjectId,
+      });
+
+      if (!profile) {
+        this.logger.error(
+          `❌ Không tìm thấy PartnerProfile với userId ${userId}`,
+        );
+        return null;
+      }
+
+      if (profile.balance < actualAmount) {
+        this.logger.warn(
+          `⚠️ User ${userId} không đủ số dư. Hiện có ${profile.balance}, cần ${actualAmount}`,
+        );
+        return null;
+      }
+
+      const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
+        { userId: userObjectId },
+        { $inc: { balance: -actualAmount } },
+        { new: true },
+      );
+
+      this.logger.log(
+        `💸 Đã trừ ${actualAmount}đ (${percent * 100}% của ${amount}đ) khỏi user ${userId}. Số dư mới: ${updatedProfile.balance}`,
+      );
+
+      return updatedProfile;
+    } catch (error) {
+      this.logger.error(`❌ Lỗi khi trừ tiền có %: ${error.message}`);
+      return null;
     }
   }
 }
