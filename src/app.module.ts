@@ -13,6 +13,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ChatModule } from './modules/chat/chat.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { TransactionModule } from './modules/transaction/transaction.module';
+import { RateModule } from './modules/rate/rate.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { TransactionModule } from './modules/transaction/transaction.module';
     ChatModule,
     AppointmentModule,
     TransactionModule,
+    RateModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

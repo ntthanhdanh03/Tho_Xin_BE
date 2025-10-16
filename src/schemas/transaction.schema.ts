@@ -3,9 +3,12 @@ import { Document, Types } from 'mongoose';
 
 export type TransactionType = 'topUp' | 'withdraw' | 'appointment';
 export type TransactionStatus = 'pending' | 'success' | 'failed';
+export type PaymentMethod = 'qr' | 'cash';
+
+export type TransactionDocument = Transaction & Document;
 
 @Schema({ timestamps: true })
-export class Transaction extends Document {
+export class Transaction {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
@@ -23,6 +26,9 @@ export class Transaction extends Document {
 
   @Prop()
   balanceAfter?: number;
+
+  @Prop({ type: String, enum: ['qr', 'cash'], required: false })
+  paymentMethod?: PaymentMethod;
 
   @Prop({ type: Types.ObjectId, ref: 'Appointment', required: false })
   appointmentId?: Types.ObjectId;

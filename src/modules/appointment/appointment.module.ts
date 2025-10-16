@@ -10,14 +10,16 @@ import {
 } from 'src/schemas/create-installation.schema';
 import { NotificationModule } from '../notication/notification.module';
 import { UserModule } from '../user/user.module';
+import { Transaction, TransactionSchema } from 'src/schemas/transaction.schema';
+import { Rate, RateSchema } from 'src/schemas/rate.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: Appointment.name, schema: AppointmentSchema },
-    ]),
-    MongooseModule.forFeature([
       { name: Installation.name, schema: InstallationSchema },
+      { name: Transaction.name, schema: TransactionSchema },
+      { name: Appointment.name, schema: AppointmentSchema },
+      { name: Rate.name, schema: RateSchema },
     ]),
     UserModule,
     NotificationModule,

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Body, Req, Get, Param } from '@nestjs/common';
 import { Request } from 'express';
 import { TransactionService } from './transaction.service';
 
@@ -16,6 +16,11 @@ export class TransactionController {
   async createWithDraw(@Body() body: { amount: number; userId: string }) {
     const { amount, userId } = body;
     return this.transactionService.createRequestWithdraw(amount, userId);
+  }
+
+  @Get('user/:userId')
+  async getTransactionsByUserId(@Param('userId') userId: string) {
+    return await this.transactionService.getTransactionsByUserId(userId);
   }
 
   // @Post('with-draw/id/accept')

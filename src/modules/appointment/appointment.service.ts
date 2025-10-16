@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -13,6 +18,12 @@ import {
 } from 'src/schemas/create-installation.schema';
 import { NotificationService } from '../notication/notification.service';
 import { UserService } from '../user/user.service';
+import {
+  Transaction,
+  TransactionDocument,
+} from 'src/schemas/transaction.schema';
+import { PaidTransactionDocument } from 'src/schemas/paid-transaction.schema';
+import { Rate, RateDocument } from 'src/schemas/rate.schema';
 
 @Injectable()
 export class AppointmentService {
@@ -21,10 +32,12 @@ export class AppointmentService {
     private readonly userService: UserService,
     @InjectModel(Installation.name)
     private readonly installationModel: Model<InstallationDocument>,
-
     @InjectModel(Appointment.name)
     private readonly appointmentModel: Model<AppointmentDocument>,
-
+    @InjectModel(Transaction.name)
+    private readonly transactionModel: Model<TransactionDocument>,
+    @InjectModel(Rate.name)
+    private readonly rateModel: Model<RateDocument>,
     private readonly notificationService: NotificationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -162,6 +175,7 @@ export class AppointmentService {
       partnerId?: Types.ObjectId;
       amount?: number;
     },
+    transactionId?: string,
   ): Promise<Appointment> {
     const allowedFields = ['status', 'paymentMethod'];
     const filteredData: any = {};
@@ -193,8 +207,24 @@ export class AppointmentService {
 
     if (updated.paymentMethod === 'qr') {
       await this.userService.addBalanceWithPercent(userId, amount, 0.9);
+      await this.transactionModel.create({
+        userId: new Types.ObjectId(userId),
+        amount,
+        status: 'success',
+        type: 'appointment',
+        transactionId: transactionId,
+        paymentMethod: 'qr',
+      });
     } else if (updated.paymentMethod === 'cash') {
       await this.userService.deductBalanceWithPercent(userId, amount, 0.1);
+      await this.transactionModel.create({
+        userId: new Types.ObjectId(userId),
+        amount,
+        status: 'success',
+        type: 'appointment',
+        transactionId: transactionId,
+        paymentMethod: 'cash',
+      });
     } else {
       this.logger.warn(
         `⚠️ paymentMethod không hợp lệ: ${updated.paymentMethod}`,
@@ -226,7 +256,7 @@ export class AppointmentService {
   }> {
     const all = await this.appointmentModel
       .find({ partnerId: new Types.ObjectId(partnerId) })
-      .populate('orderId') // populate order
+      .populate('orderId')
       .populate({
         path: 'clientId',
         model: 'User',

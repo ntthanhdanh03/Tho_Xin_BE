@@ -52,7 +52,9 @@ export class TransactionService {
       status: 'pending',
       type: 'withdraw',
     });
-    this.logger.log(`✅ Tạo giao dịch with-draw: ${amount}`);
+
+    this.logger.log(`✅ Tạo giao dịch withdraw: ${amount}`);
+    return amount;
   }
 
   async createQRPaid(
@@ -78,6 +80,27 @@ export class TransactionService {
     this.logger.log(`➡️ QR URL: ${qrUrl}`);
 
     return { qrUrl, description };
+  }
+
+  async getTransactionsByUserId(userId: string) {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+
+      const transactions = await this.transactionModel
+        .find({ userId: userObjectId })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      return {
+        transactions,
+      };
+    } catch (error) {
+      this.logger.error(
+        `❌ Lỗi khi lấy transaction của userId ${userId}`,
+        error,
+      );
+      return { ok: false, message: 'internal_error' };
+    }
   }
 
   async handleWebhook(payload: any) {
@@ -170,13 +193,7 @@ export class TransactionService {
     }
 
     const appointmentId = matched[1];
-    const timestamp = matched[2];
     const amount = Number(payload.amount || payload.transferAmount || 0);
-
-    this.logger.log(
-      `🔍 Mô tả trích ra: PAID${appointmentId}${timestamp ? '_' + timestamp : ''}`,
-    );
-    this.logger.log(`🔍 AppointmentId: ${appointmentId}`);
 
     const transaction = await this.paidTransactionModel
       .findOne({
@@ -200,12 +217,16 @@ export class TransactionService {
     transaction.status = 'success';
     await transaction.save();
 
-    await this.appointmentService.updateToComplete(appointmentId, {
-      status: 6,
-      paymentMethod: 'qr',
-      partnerId: transaction.partnerId,
-      amount,
-    });
+    await this.appointmentService.updateToComplete(
+      appointmentId,
+      {
+        status: 6,
+        paymentMethod: 'qr',
+        partnerId: transaction.partnerId,
+        amount,
+      },
+      matched[0],
+    );
 
     this.eventEmitter.emit('transaction.paid_appointment.success', {
       appointmentId,
