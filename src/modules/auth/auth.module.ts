@@ -20,6 +20,7 @@ import {
   PartnerLocation,
   PartnerLocationSchema,
 } from 'src/schemas/partner-location.schema';
+import { PromotionModule } from '../promotion/promotion.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import {
       { name: Installation.name, schema: InstallationSchema },
       { name: PartnerLocation.name, schema: PartnerLocationSchema },
     ]),
+    PromotionModule,
     JwtModule.register({
       secret: jwtConfig.secret,
       signOptions: {

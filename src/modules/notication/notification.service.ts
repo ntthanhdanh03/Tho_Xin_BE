@@ -27,7 +27,6 @@ export class NotificationService {
       },
       token,
     };
-
     try {
       const response = await admin.messaging().send(message);
       return { success: true, response };

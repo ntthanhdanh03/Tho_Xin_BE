@@ -14,6 +14,7 @@ import { ChatModule } from './modules/chat/chat.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { TransactionModule } from './modules/transaction/transaction.module';
 import { RateModule } from './modules/rate/rate.module';
+import { PromotionModule } from './modules/promotion/promotion.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RateModule } from './modules/rate/rate.module';
     AppointmentModule,
     TransactionModule,
     RateModule,
+    PromotionModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

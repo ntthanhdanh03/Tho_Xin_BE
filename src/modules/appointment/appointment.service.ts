@@ -24,6 +24,7 @@ import {
 } from 'src/schemas/transaction.schema';
 import { PaidTransactionDocument } from 'src/schemas/paid-transaction.schema';
 import { Rate, RateDocument } from 'src/schemas/rate.schema';
+import { PromotionService } from '../promotion/promotion.service';
 
 @Injectable()
 export class AppointmentService {
@@ -39,6 +40,7 @@ export class AppointmentService {
     @InjectModel(Rate.name)
     private readonly rateModel: Model<RateDocument>,
     private readonly notificationService: NotificationService,
+    private readonly promotionService: PromotionService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -109,6 +111,7 @@ export class AppointmentService {
     data: Partial<Appointment>,
     type: 'client' | 'partner',
   ): Promise<Appointment> {
+    // ✅ Cập nhật thông tin lịch hẹn
     const updated = await this.appointmentModel
       .findByIdAndUpdate(id, data, { new: true })
       .exec();
@@ -117,8 +120,23 @@ export class AppointmentService {
       throw new NotFoundException(`Appointment ${id} not found`);
     }
 
-    const { clientId, partnerId } = updated;
+    // ✅ Nếu có mã khuyến mãi thì tự động áp dụng
+    if (data.promotionCode) {
+      try {
+        console.log('🎟️ Phát hiện có mã khuyến mãi:', data.promotionCode);
+        await this.promotionService.applyPromotion(
+          id,
+          data.promotionCode,
+          updated.clientId.toString(),
+        );
+        console.log('✅ Áp dụng mã khuyến mãi thành công');
+      } catch (err) {
+        console.warn('⚠️ Áp dụng mã khuyến mãi thất bại:', err.message);
+      }
+    }
 
+    // ✅ Gửi thông báo realtime + push notification
+    const { clientId, partnerId } = updated;
     const targetUserId = type === 'partner' ? clientId : partnerId;
     const receiverType = type === 'partner' ? 'client' : 'partner';
 
@@ -146,7 +164,7 @@ export class AppointmentService {
 
     const messageTitle =
       receiverType === 'partner'
-        ? 'Khách hàng đã câp nhật trạng thái công việc'
+        ? 'Khách hàng đã cập nhật trạng thái công việc'
         : 'Thợ đã cập nhật trạng thái công việc';
     const messageBody =
       receiverType === 'partner'
@@ -188,6 +206,11 @@ export class AppointmentService {
 
     const updated = await this.appointmentModel
       .findByIdAndUpdate(id, filteredData, { new: true })
+      .populate({
+        path: 'partnerId',
+        model: 'User',
+        select: 'phoneNumber fullName avatarUrl',
+      })
       .exec();
 
     if (!updated) {
@@ -231,6 +254,9 @@ export class AppointmentService {
       );
     }
 
+    this.eventEmitter.emit('appointment.updateComplete', {
+      appointment: updated,
+    });
     return updated;
   }
 

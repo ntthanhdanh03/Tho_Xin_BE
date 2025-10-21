@@ -164,6 +164,17 @@ export class AppGateway
     }
   }
 
+  @OnEvent('appointment.updateComplete')
+  handleAppointmentComplete(payload) {
+    console.log('📩 [appointment.updateComplete] Event nhận được:', payload);
+
+    const { appointment } = payload;
+
+    this.server
+      .to(`client_${appointment.clientId}`)
+      .emit('appointment.updateComplete', appointment);
+  }
+
   @OnEvent('location.update')
   handlePartnerLocationUpdate(payload: {
     clientId: string;
@@ -223,7 +234,6 @@ export class AppGateway
       payload,
     );
 
-    // Emit tới partner
     this.server
       .to(`partner_${partnerId}`)
       .emit('transaction.paid_appointment.success', {
@@ -232,23 +242,5 @@ export class AppGateway
         timestamp,
         message: 'Thanh toán hoàn tất!',
       });
-
-    this.logger.log(
-      `✅ Đã emit 'transaction.paid_appointment.success' tới partner_${partnerId} - Số tiền: ${amount}`,
-    );
-
-    // Emit tới client
-    this.server
-      .to(`client_${clientId}`)
-      .emit('transaction.paid_appointment.success', {
-        appointmentId,
-        amount,
-        timestamp,
-        message: 'Thanh toán hoàn tất!',
-      });
-
-    this.logger.log(
-      `✅ Đã emit 'transaction.paid_appointment.success' tới client_${clientId} - Số tiền: ${amount}`,
-    );
   }
 }

@@ -1,3 +1,4 @@
+import { Promotion } from 'src/schemas/promotion.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -12,6 +13,7 @@ import { NotificationModule } from '../notication/notification.module';
 import { UserModule } from '../user/user.module';
 import { Transaction, TransactionSchema } from 'src/schemas/transaction.schema';
 import { Rate, RateSchema } from 'src/schemas/rate.schema';
+import { PromotionModule } from '../promotion/promotion.module';
 
 @Module({
   imports: [
@@ -23,6 +25,7 @@ import { Rate, RateSchema } from 'src/schemas/rate.schema';
     ]),
     UserModule,
     NotificationModule,
+    PromotionModule,
   ],
   providers: [AppointmentService],
   controllers: [AppointmentController],

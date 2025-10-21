@@ -30,6 +30,7 @@ import {
   PartnerLocation,
   PartnerLocationDocument,
 } from 'src/schemas/partner-location.schema';
+import { PromotionService } from '../promotion/promotion.service';
 
 @Injectable()
 export class AuthService {
@@ -44,6 +45,7 @@ export class AuthService {
     private partnerLocationModel: Model<PartnerLocationDocument>,
     @InjectModel(Installation.name)
     private readonly installationModel: Model<InstallationDocument>,
+    private readonly promotionService: PromotionService,
     private jwtService: JwtService,
   ) {}
 
@@ -91,6 +93,9 @@ export class AuthService {
         });
       } else if (dto.role === 'client') {
         await this.clientModel.create({ userId: user._id });
+        await this.promotionService.addClientToWelcomePromo(
+          user._id.toString(),
+        );
       }
 
       await this.installationModel.create({

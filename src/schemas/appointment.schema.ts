@@ -36,6 +36,15 @@ export class Appointment {
   @Prop({ type: Number, default: 0 })
   laborCost: number;
 
+  @Prop({ type: String, default: null })
+  promotionCode?: string;
+
+  @Prop({ type: Number, default: 0 })
+  promotionDiscount: number;
+
+  @Prop({ type: Number, default: 0 })
+  finalAmount: number;
+
   @Prop({
     type: {
       note: { type: String, default: '' },

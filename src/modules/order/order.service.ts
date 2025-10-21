@@ -249,7 +249,7 @@ export class OrderService {
     if (!applicant) throw new NotFoundException('Applicant not found');
 
     // Cập nhật trạng thái đơn
-    order.status = OrderStatus.COMPLETED;
+    order.status = OrderStatus.PROCESSING;
     // Chỉ giữ lại thợ đã chọn
     order.applicants = [applicant];
 
