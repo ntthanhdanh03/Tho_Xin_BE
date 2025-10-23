@@ -3,6 +3,8 @@ import {
   NotFoundException,
   InternalServerErrorException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { User, UserDocument } from 'src/schemas/user.schema';
@@ -23,6 +25,8 @@ import {
   PartnerLocationDocument,
 } from 'src/schemas/partner-location.schema';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OrderService } from '../order/order.service';
+import { OrderStatus } from 'src/schemas/order.schema';
 
 @Injectable()
 export class UserService {
@@ -38,6 +42,8 @@ export class UserService {
     private clientModel: Model<ClientDocument>,
     @InjectModel(PartnerLocation.name)
     private partnerLocationModel: Model<PartnerLocationDocument>,
+    @Inject(forwardRef(() => OrderService))
+    private readonly orderService: OrderService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -233,14 +239,21 @@ export class UserService {
     }
   }
 
-  async addBalanceWithPercent(userId: string, amount: number, percent: number) {
+  async addBalanceWithPercent(
+    userId: string,
+    amount: number, // 💰 Giá gốc (VD: 400000)
+    percent: number, // 💼 Tỷ lệ phần thợ nhận (VD: 0.8)
+    promotionDiscount = 0, // 🎁 Khuyến mãi do hệ thống chịu
+    orderId?: string,
+  ) {
     try {
       const userObjectId = new Types.ObjectId(userId);
       const actualAmount = Math.floor(amount * percent);
+      const totalReceive = actualAmount;
 
       const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
         { userId: userObjectId },
-        { $inc: { balance: actualAmount } },
+        { $inc: { balance: totalReceive } },
         { new: true },
       );
 
@@ -251,9 +264,9 @@ export class UserService {
         return null;
       }
 
-      this.logger.log(
-        `💰 Đã cộng ${actualAmount}đ (${percent * 100}% của ${amount}đ) cho user ${userId}. Số dư mới: ${updatedProfile.balance}`,
-      );
+      await this.orderService.updateOrder(orderId?.toString(), {
+        status: OrderStatus.COMPLETED,
+      });
 
       return updatedProfile;
     } catch (error) {
@@ -266,10 +279,17 @@ export class UserService {
     userId: string,
     amount: number,
     percent: number,
+    promotionDiscount: number,
+    orderId?: string,
   ) {
+    this.logger.log(
+      `📘 [deductBalanceWithPercent] userId=${userId}, amount=${amount}, percent=${percent}, discount=${promotionDiscount}`,
+    );
+
     try {
       const userObjectId = new Types.ObjectId(userId);
-      const actualAmount = Math.floor(amount * percent);
+
+      const commission = Math.round(amount * percent);
 
       const profile = await this.partnerProfileModel.findOne({
         userId: userObjectId,
@@ -282,23 +302,22 @@ export class UserService {
         return null;
       }
 
-      if (profile.balance < actualAmount) {
+      if (profile.balance < commission) {
         this.logger.warn(
-          `⚠️ User ${userId} không đủ số dư. Hiện có ${profile.balance}, cần ${actualAmount}`,
+          `⚠️ User ${userId} không đủ số dư. Hiện có ${profile.balance}, cần ${commission}`,
         );
         return null;
       }
 
       const updatedProfile = await this.partnerProfileModel.findOneAndUpdate(
         { userId: userObjectId },
-        { $inc: { balance: -actualAmount } },
+        { $inc: { balance: -commission + promotionDiscount } },
         { new: true },
       );
 
-      this.logger.log(
-        `💸 Đã trừ ${actualAmount}đ (${percent * 100}% của ${amount}đ) khỏi user ${userId}. Số dư mới: ${updatedProfile.balance}`,
-      );
-
+      await this.orderService.updateOrder(orderId?.toString(), {
+        status: OrderStatus.COMPLETED,
+      });
       return updatedProfile;
     } catch (error) {
       this.logger.error(`❌ Lỗi khi trừ tiền có %: ${error.message}`);

@@ -122,7 +122,7 @@ export class UserController {
   ) {
     if (!file) throw new BadRequestException('Chưa chọn file');
 
-    const imageUrl = `http://192.168.1.13:3000/uploads/kyc/${field}/${file.filename}`;
+    const imageUrl = `http://192.168.1.7:3000/uploads/kyc/${field}/${file.filename}`;
     return {
       message: 'Upload thành công',
       url: imageUrl,

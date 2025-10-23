@@ -7,6 +7,7 @@ import { PaidTransaction } from 'src/schemas/paid-transaction.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { AppointmentService } from '../appointment/appointment.service';
 import { Transaction } from 'src/schemas/transaction.schema';
+import { Appointment } from 'src/schemas/appointment.schema';
 
 @Injectable()
 export class TransactionService {
@@ -23,6 +24,8 @@ export class TransactionService {
     private readonly transactionModel: Model<Transaction>,
     @InjectModel(PaidTransaction.name)
     private readonly paidTransactionModel: Model<PaidTransaction>,
+    @InjectModel(Appointment.name)
+    private readonly appointmentModel: Model<Appointment>,
     private readonly appointmentService: AppointmentService,
   ) {}
 
@@ -67,7 +70,7 @@ export class TransactionService {
     const description = `PAID${appointmentId}_${timestamp}`;
     const qrUrl = `${this.SEPAY_QR_URL}?acc=${this.ACCOUNT}&bank=${this.BANK}&amount=${amount}&des=${description}`;
 
-    await this.paidTransactionModel.create({
+    const paidTransaction = await this.paidTransactionModel.create({
       clientId: new Types.ObjectId(clientId),
       partnerId: new Types.ObjectId(partnerId),
       appointmentId: new Types.ObjectId(appointmentId),
@@ -76,10 +79,14 @@ export class TransactionService {
       transactionCode: description,
     });
 
-    this.logger.log(`✅ Tạo giao dịch thanh toán Appointment: ${description}`);
+    this.logger.log(`✅ Tạo giao dịch Appointment QR: ${description}`);
     this.logger.log(`➡️ QR URL: ${qrUrl}`);
 
-    return { qrUrl, description };
+    return {
+      qrUrl,
+      description,
+      transactionId: paidTransaction._id.toString(),
+    };
   }
 
   async getTransactionsByUserId(userId: string) {
@@ -204,13 +211,21 @@ export class TransactionService {
 
     if (!transaction) {
       this.logger.warn(
-        `❌ Không tìm thấy giao dịch thanh toán phù hợp cho appointmentId: ${appointmentId}`,
+        `❌ Không tìm thấy giao dịch phù hợp cho appointmentId: ${appointmentId}`,
       );
       return { ok: false, reason: 'not_found' };
     }
 
-    if (amount !== transaction.amount) {
-      this.logger.warn(`⚠️ Sai số tiền: ${amount} ≠ ${transaction.amount}`);
+    const appointment = await this.appointmentModel.findById(appointmentId);
+    if (!appointment) {
+      this.logger.warn(`❌ Appointment ${appointmentId} không tồn tại`);
+      return { ok: false, reason: 'appointment_not_found' };
+    }
+
+    const transactionAmount = transaction.amount;
+
+    if (Math.abs(amount - transactionAmount) > 1) {
+      this.logger.warn(`⚠️ Sai số tiền: ${amount} ≠ ${transactionAmount}`);
       return { ok: false, reason: 'amount_mismatch' };
     }
 
@@ -223,20 +238,21 @@ export class TransactionService {
         status: 6,
         paymentMethod: 'qr',
         partnerId: transaction.partnerId,
-        amount,
+        amount: appointment.agreedPrice,
       },
-      matched[0],
+      transaction._id.toString(),
     );
 
     this.eventEmitter.emit('transaction.paid_appointment.success', {
       appointmentId,
       clientId: transaction.clientId,
       partnerId: transaction.partnerId,
-      amount,
+      amount: appointment.agreedPrice,
       timestamp: Date.now(),
     });
+
     this.logger.log(
-      `✅ Thanh toán thành công cho appointment ${appointmentId}, số tiền: ${amount}`,
+      `✅ Thanh toán thành công Appointment ${appointmentId}, số tiền: ${amount}`,
     );
     return { ok: true, appointmentId, amount };
   }

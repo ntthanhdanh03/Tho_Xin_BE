@@ -1,5 +1,5 @@
 import { ChatRoomService } from '../chat/chat.service';
-import { NotificationService } from '../notication/notification.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   Injectable,
   NotFoundException,
@@ -24,7 +24,6 @@ import {
   PartnerProfile,
   PartnerProfileDocument,
 } from 'src/schemas/partner-profile.schema';
-// import { AppointmentService } from '../appointment/appointment.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppointmentService } from '../appointment/appointment.service';
 
@@ -237,33 +236,26 @@ export class OrderService {
   ): Promise<OrderDocument> {
     const order = await this.getOrderById(orderId);
 
-    // Không cho chọn lại nếu đã hoàn thành hoặc hủy
     if ([OrderStatus.COMPLETED, OrderStatus.CANCELLED].includes(order.status)) {
       throw new BadRequestException('Cannot select applicant for this order');
     }
 
-    // Tìm thợ được chọn trong danh sách applicants
     const applicant = order.applicants.find(
       (a) => a.partnerId.toString() === partnerId,
     );
     if (!applicant) throw new NotFoundException('Applicant not found');
-
-    // Cập nhật trạng thái đơn
     order.status = OrderStatus.PROCESSING;
-    // Chỉ giữ lại thợ đã chọn
     order.applicants = [applicant];
 
     const savedOrder = await order.save();
 
-    // ✅ Tạo Appointment tương ứng
     await this.appointmentService.create({
       orderId: savedOrder._id as Types.ObjectId,
       clientId: savedOrder.clientId as Types.ObjectId,
       partnerId: applicant.partnerId as Types.ObjectId,
-      roomId: applicant.roomId as Types.ObjectId, // ✅ lấy đúng roomId trong applicant
+      roomId: applicant.roomId as Types.ObjectId,
     });
 
-    // Emit event cho thợ biết rằng họ đã được chọn
     this.eventEmitter.emit('order.selectApplicant', {
       partnerId: applicant.partnerId.toString(),
       appointment: savedOrder,

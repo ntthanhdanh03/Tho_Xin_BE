@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UserService } from './user.service';
 import { UserController } from './user.controller';
@@ -13,6 +13,7 @@ import {
   PartnerLocation,
   PartnerLocationSchema,
 } from 'src/schemas/partner-location.schema';
+import { OrderModule } from '../order/order.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import {
       { name: Client.name, schema: ClientSchema },
       { name: PartnerLocation.name, schema: PartnerLocationSchema },
     ]),
+    forwardRef(() => OrderModule),
   ],
   controllers: [UserController],
   providers: [UserService],

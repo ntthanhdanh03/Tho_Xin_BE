@@ -9,6 +9,7 @@ import {
   PaidTransactionSchema,
 } from 'src/schemas/paid-transaction.schema';
 import { AppointmentModule } from '../appointment/appointment.module';
+import { Appointment, AppointmentSchema } from 'src/schemas/appointment.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AppointmentModule } from '../appointment/appointment.module';
     MongooseModule.forFeature([
       { name: Transaction.name, schema: TransactionSchema },
       { name: PaidTransaction.name, schema: PaidTransactionSchema },
+      { name: Appointment.name, schema: AppointmentSchema },
     ]),
     AppointmentModule,
   ],

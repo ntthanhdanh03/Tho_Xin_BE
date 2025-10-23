@@ -6,7 +6,7 @@ import {
   InstallationSchema,
 } from 'src/schemas/create-installation.schema';
 import { PartnerKYC, PartnerKYCSchema } from 'src/schemas/partner-kyc.schema';
-import { NotificationModule } from '../notication/notification.module';
+
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
 import {
@@ -15,6 +15,7 @@ import {
 } from 'src/schemas/partner-profile.schema';
 import { ChatModule } from '../chat/chat.module';
 import { AppointmentModule } from '../appointment/appointment.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -34,5 +35,6 @@ import { AppointmentModule } from '../appointment/appointment.module';
   ],
   controllers: [OrderController],
   providers: [OrderService],
+  exports: [OrderService],
 })
 export class OrderModule {}

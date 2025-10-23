@@ -70,4 +70,9 @@ export class AppointmentController {
   getById(@Param('id') id: string) {
     return this.appointmentService.getById(id);
   }
+
+  @Get('order/:orderId')
+  getByOrderId(@Param('orderId') orderId: string) {
+    return this.appointmentService.getByOrderId(orderId);
+  }
 }

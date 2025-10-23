@@ -27,6 +27,9 @@ export class Transaction {
   @Prop()
   balanceAfter?: number;
 
+  @Prop({ default: 0 })
+  promotionDiscount?: number;
+
   @Prop({ type: String, enum: ['qr', 'cash'], required: false })
   paymentMethod?: PaymentMethod;
 

@@ -9,7 +9,7 @@ import {
   Installation,
   InstallationSchema,
 } from 'src/schemas/create-installation.schema';
-import { NotificationModule } from '../notication/notification.module';
+import { NotificationModule } from '../notification/notification.module';
 import { UserModule } from '../user/user.module';
 import { Transaction, TransactionSchema } from 'src/schemas/transaction.schema';
 import { Rate, RateSchema } from 'src/schemas/rate.schema';

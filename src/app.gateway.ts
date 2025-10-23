@@ -166,8 +166,6 @@ export class AppGateway
 
   @OnEvent('appointment.updateComplete')
   handleAppointmentComplete(payload) {
-    console.log('📩 [appointment.updateComplete] Event nhận được:', payload);
-
     const { appointment } = payload;
 
     this.server

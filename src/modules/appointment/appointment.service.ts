@@ -16,7 +16,7 @@ import {
   Installation,
   InstallationDocument,
 } from 'src/schemas/create-installation.schema';
-import { NotificationService } from '../notication/notification.service';
+import { NotificationService } from '../notification/notification.service';
 import { UserService } from '../user/user.service';
 import {
   Transaction,
@@ -25,6 +25,8 @@ import {
 import { PaidTransactionDocument } from 'src/schemas/paid-transaction.schema';
 import { Rate, RateDocument } from 'src/schemas/rate.schema';
 import { PromotionService } from '../promotion/promotion.service';
+import { OrderService } from '../order/order.service';
+import { OrderStatus } from 'src/schemas/order.schema';
 
 @Injectable()
 export class AppointmentService {
@@ -111,7 +113,6 @@ export class AppointmentService {
     data: Partial<Appointment>,
     type: 'client' | 'partner',
   ): Promise<Appointment> {
-    // ✅ Cập nhật thông tin lịch hẹn
     const updated = await this.appointmentModel
       .findByIdAndUpdate(id, data, { new: true })
       .exec();
@@ -119,11 +120,8 @@ export class AppointmentService {
     if (!updated) {
       throw new NotFoundException(`Appointment ${id} not found`);
     }
-
-    // ✅ Nếu có mã khuyến mãi thì tự động áp dụng
     if (data.promotionCode) {
       try {
-        console.log('🎟️ Phát hiện có mã khuyến mãi:', data.promotionCode);
         await this.promotionService.applyPromotion(
           id,
           data.promotionCode,
@@ -135,7 +133,6 @@ export class AppointmentService {
       }
     }
 
-    // ✅ Gửi thông báo realtime + push notification
     const { clientId, partnerId } = updated;
     const targetUserId = type === 'partner' ? clientId : partnerId;
     const receiverType = type === 'partner' ? 'client' : 'partner';
@@ -195,6 +192,8 @@ export class AppointmentService {
     },
     transactionId?: string,
   ): Promise<Appointment> {
+    this.logger.log(`🔄 updateToComplete() for appointment ${id}`);
+
     const allowedFields = ['status', 'paymentMethod'];
     const filteredData: any = {};
 
@@ -221,38 +220,70 @@ export class AppointmentService {
       data.partnerId instanceof Types.ObjectId
         ? data.partnerId.toString()
         : data.partnerId;
+
     const amount = data.amount;
+    const discount = updated.promotionDiscount || 0;
 
     if (!userId || !amount) {
       this.logger.warn(`⚠️ Thiếu userId hoặc amount khi cập nhật hoàn tất`);
       return updated;
     }
 
+    this.logger.log(
+      `💰 Cập nhật hoàn tất | userId=${userId} | amount=${amount} | method=${updated.paymentMethod}`,
+    );
+
     if (updated.paymentMethod === 'qr') {
-      await this.userService.addBalanceWithPercent(userId, amount, 0.9);
+      await this.userService.addBalanceWithPercent(
+        userId,
+        amount,
+        0.8,
+        discount,
+        updated?.orderId?.toString(),
+      );
+
       await this.transactionModel.create({
         userId: new Types.ObjectId(userId),
         amount,
+        promotionDiscount: discount,
         status: 'success',
         type: 'appointment',
-        transactionId: transactionId,
+        transactionId,
         paymentMethod: 'qr',
+        appointmentId: updated._id,
       });
+
+      this.logger.log(`✅ Hoàn tất thanh toán QR: +${amount * 0.8} cho thợ`);
     } else if (updated.paymentMethod === 'cash') {
-      await this.userService.deductBalanceWithPercent(userId, amount, 0.1);
+      await this.userService.deductBalanceWithPercent(
+        userId,
+        amount,
+        0.2,
+        discount,
+        updated?.orderId?.toString(),
+      );
+
       await this.transactionModel.create({
         userId: new Types.ObjectId(userId),
         amount,
+        promotionDiscount: discount,
         status: 'success',
         type: 'appointment',
-        transactionId: transactionId,
+        transactionId,
         paymentMethod: 'cash',
+        appointmentId: updated._id,
       });
+
+      this.logger.log(`✅ Thanh toán tiền mặt: -${amount * 0.2} cho hệ thống`);
     } else {
       this.logger.warn(
         `⚠️ paymentMethod không hợp lệ: ${updated.paymentMethod}`,
       );
     }
+
+    // await this.orderService.updateOrder(updated?.orderId?.toString(), {
+    //   status: OrderStatus.COMPLETED,
+    // });
 
     this.eventEmitter.emit('appointment.updateComplete', {
       appointment: updated,
@@ -269,6 +300,21 @@ export class AppointmentService {
     if (!appointment) {
       throw new NotFoundException(`Appointment ${id} not found`);
     }
+    return appointment;
+  }
+
+  async getByOrderId(orderId: string): Promise<Appointment> {
+    const appointment = await this.appointmentModel
+      .findOne({ orderId: new Types.ObjectId(orderId) })
+      .populate('orderId')
+      .exec();
+
+    if (!appointment) {
+      throw new NotFoundException(
+        `Appointment with orderId ${orderId} not found`,
+      );
+    }
+
     return appointment;
   }
 

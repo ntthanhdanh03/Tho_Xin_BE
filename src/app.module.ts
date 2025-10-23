@@ -7,7 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { mongoAsyncConfig } from './config/db.config.ts';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
-import { NotificationModule } from './modules/notication/notification.module';
+import { NotificationModule } from './modules/notification/notification.module';
 import { AppGateway } from './app.gateway';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ChatModule } from './modules/chat/chat.module';
@@ -15,6 +15,7 @@ import { AppointmentModule } from './modules/appointment/appointment.module';
 import { TransactionModule } from './modules/transaction/transaction.module';
 import { RateModule } from './modules/rate/rate.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
+import { AIModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PromotionModule } from './modules/promotion/promotion.module';
     TransactionModule,
     RateModule,
     PromotionModule,
+    AIModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

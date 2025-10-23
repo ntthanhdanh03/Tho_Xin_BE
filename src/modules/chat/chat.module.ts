@@ -5,7 +5,7 @@ import { ChatController } from './chat.controller';
 import { ChatRoom, ChatRoomSchema } from 'src/schemas/chat-room.schema';
 import { Message, MessageSchema } from 'src/schemas/message.schema';
 import { ChatRoomService } from './chat.service';
-import { NotificationModule } from '../notication/notification.module';
+import { NotificationModule } from '../notification/notification.module';
 import {
   Installation,
   InstallationSchema,

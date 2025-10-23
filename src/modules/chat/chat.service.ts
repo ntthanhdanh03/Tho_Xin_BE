@@ -5,7 +5,7 @@ import { ChatRoom, ChatRoomDocument } from 'src/schemas/chat-room.schema';
 import { Message, MessageDocument } from 'src/schemas/message.schema';
 import { SendMessageDto } from './dto/send-message.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { NotificationService } from '../notication/notification.service';
+import { NotificationService } from '../notification/notification.service';
 import {
   Installation,
   InstallationDocument,
