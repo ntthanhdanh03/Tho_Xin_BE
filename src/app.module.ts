@@ -16,6 +16,7 @@ import { TransactionModule } from './modules/transaction/transaction.module';
 import { RateModule } from './modules/rate/rate.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
 import { AIModule } from './modules/ai/ai.module';
+import { ReportModule } from './modules/report/report.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AIModule } from './modules/ai/ai.module';
     RateModule,
     PromotionModule,
     AIModule,
+    ReportModule,
     EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],

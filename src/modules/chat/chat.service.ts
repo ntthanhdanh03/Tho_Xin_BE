@@ -11,6 +11,7 @@ import {
   InstallationDocument,
 } from 'src/schemas/create-installation.schema';
 import { Order, OrderDocument } from 'src/schemas/order.schema';
+import { AIService } from '../ai/ai.service';
 
 @Injectable()
 export class ChatRoomService {
@@ -21,6 +22,7 @@ export class ChatRoomService {
     @InjectModel(Installation.name)
     private installationModel: Model<InstallationDocument>,
     private readonly notificationService: NotificationService,
+    private readonly AIService: AIService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -70,6 +72,38 @@ export class ChatRoomService {
     return this.chatRoomModel.find({ orderId }).lean().exec();
   }
 
+  // async sendMessage(dto: SendMessageDto) {
+  //   const result = await this.messageModel.create(dto);
+
+  //   this.eventEmitter.emit('chat.sendMessage', result);
+
+  //   const installations = await this.installationModel.find({
+  //     idUsers: dto.receiverId,
+  //   });
+
+  //   const tokens: string[] = [];
+  //   installations.forEach((inst) => {
+  //     inst.deviceToken.forEach((dt) => {
+  //       if (dt.token) tokens.push(dt.token);
+  //     });
+  //   });
+
+  //   const message = `Có một tin nhắn từ Thợ, hãy kiểm tra ngay!`;
+  //   for (const token of tokens) {
+  //     try {
+  //       await this.notificationService.sendPushNotification(
+  //         token,
+  //         'Tin nhắn mới',
+  //         message,
+  //       );
+  //     } catch (error) {
+  //       console.error(`❌ Lỗi gửi notification tới ${token}:`, error.message);
+  //     }
+  //   }
+
+  //   return result;
+  // }
+
   async sendMessage(dto: SendMessageDto) {
     const result = await this.messageModel.create(dto);
 
@@ -97,6 +131,19 @@ export class ChatRoomService {
       } catch (error) {
         console.error(`❌ Lỗi gửi notification tới ${token}:`, error.message);
       }
+    }
+    if (result.senderType === 'partner' && result.content) {
+      this.AIService.detectRedirectIntent(dto.content, result.senderId)
+        .then(async (detected) => {
+          if (detected) {
+            console.warn(
+              `🚨 Redirect detected trong tin nhắn từ partner ${dto.senderId}: "${dto.content}"`,
+            );
+          }
+        })
+        .catch((err) =>
+          console.error('⚠️ Lỗi khi gọi AIService.detectRedirectIntent:', err),
+        );
     }
 
     return result;

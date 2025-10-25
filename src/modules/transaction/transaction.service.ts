@@ -9,6 +9,8 @@ import { AppointmentService } from '../appointment/appointment.service';
 import { Transaction } from 'src/schemas/transaction.schema';
 import { Appointment } from 'src/schemas/appointment.schema';
 
+import * as moment from 'moment';
+
 @Injectable()
 export class TransactionService {
   private readonly logger = new Logger(TransactionService.name);
@@ -89,18 +91,57 @@ export class TransactionService {
     };
   }
 
-  async getTransactionsByUserId(userId: string) {
+  async getTransactionsByUserId(
+    userId: string,
+    filter?: {
+      type?: string;
+      range?: 'week' | 'month';
+      week?: number;
+      month?: number;
+      year?: number;
+      startDate?: string;
+      endDate?: string;
+    },
+  ) {
     try {
-      const userObjectId = new Types.ObjectId(userId);
+      const query: any = { userId: new Types.ObjectId(userId) };
+
+      if (filter?.type) query.type = filter.type;
+
+      if (filter?.startDate && filter?.endDate) {
+        query.createdAt = {
+          $gte: new Date(filter.startDate),
+          $lte: new Date(filter.endDate),
+        };
+      } else if (filter?.range) {
+        const now = moment();
+        let startDate: moment.Moment;
+        let endDate: moment.Moment;
+
+        if (filter.range === 'week') {
+          const year = filter.year ?? now.year();
+          const week = filter.week ?? now.isoWeek();
+          startDate = moment().year(year).isoWeek(week).startOf('isoWeek');
+          endDate = startDate.clone().endOf('isoWeek');
+        } else if (filter.range === 'month') {
+          const year = filter.year ?? now.year();
+          const month = filter.month ?? now.month() + 1;
+          startDate = moment(
+            `${year}-${String(month).padStart(2, '0')}-01`,
+            'YYYY-MM-DD',
+          ).startOf('month');
+          endDate = startDate.clone().endOf('month');
+        }
+
+        query.createdAt = { $gte: startDate.toDate(), $lte: endDate.toDate() };
+      }
 
       const transactions = await this.transactionModel
-        .find({ userId: userObjectId })
+        .find(query)
         .sort({ createdAt: -1 })
         .lean();
 
-      return {
-        transactions,
-      };
+      return { ok: true, transactions };
     } catch (error) {
       this.logger.error(
         `❌ Lỗi khi lấy transaction của userId ${userId}`,
@@ -109,6 +150,27 @@ export class TransactionService {
       return { ok: false, message: 'internal_error' };
     }
   }
+
+  // async getTransactionsByUserId(userId: string) {
+  //   try {
+  //     const userObjectId = new Types.ObjectId(userId);
+
+  //     const transactions = await this.transactionModel
+  //       .find({ userId: userObjectId })
+  //       .sort({ createdAt: -1 })
+  //       .lean();
+
+  //     return {
+  //       transactions,
+  //     };
+  //   } catch (error) {
+  //     this.logger.error(
+  //       `❌ Lỗi khi lấy transaction của userId ${userId}`,
+  //       error,
+  //     );
+  //     return { ok: false, message: 'internal_error' };
+  //   }
+  // }
 
   async handleWebhook(payload: any) {
     this.logger.log('📩 Nhận webhook từ SePay:', payload);

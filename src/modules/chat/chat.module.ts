@@ -11,6 +11,7 @@ import {
   InstallationSchema,
 } from 'src/schemas/create-installation.schema';
 import { Order, OrderSchema } from 'src/schemas/order.schema';
+import { AIModule } from '../ai/ai.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { Order, OrderSchema } from 'src/schemas/order.schema';
       { name: Order.name, schema: OrderSchema },
     ]),
     NotificationModule,
+    AIModule,
   ],
   providers: [ChatRoomService],
   controllers: [ChatController],
