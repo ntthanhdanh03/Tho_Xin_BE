@@ -98,7 +98,6 @@ export class AppGateway
     onlineUserIds.forEach((profileId) => {
       const id = profileId.toString ? profileId.toString() : profileId;
       this.server.to(`partner_${id}`).emit('new_order', order);
-      this.logger.log(`📦 Sent new_order to partner_${id}`);
     });
   }
 
@@ -106,19 +105,14 @@ export class AppGateway
   handleAddApplicant(payload: { clientId: string[] }) {
     const { clientId } = payload;
     this.server.to(`client_${clientId}`).emit('order_addApplicant', clientId);
-    this.logger.log(`📦 Sent new_order to client_${clientId}`);
   }
 
   @OnEvent('order.selectApplicant')
   handleSelectApplicant(payload: { partnerId: string; appointment: string }) {
-    console.log('📩 [order.selectApplicant] Event nhận được:', payload);
-
     const { partnerId, appointment } = payload;
     this.server
       .to(`partner_${partnerId}`)
       .emit('select_applicant', appointment);
-
-    console.log(`✅ Đã emit 'select_applicant' cho partner_${partnerId}`);
   }
 
   @OnEvent('chat.sendMessage')
@@ -136,7 +130,6 @@ export class AppGateway
     };
 
     this.server.to(receiverRoom).emit('chat.newMessage', messagePayload);
-    this.logger.log(`📨 Sent message to ${receiverRoom}`);
   }
 
   @OnEvent('appointment.UpdateStatus')
@@ -145,8 +138,6 @@ export class AppGateway
     partnerId?: string;
     appointment: any;
   }) {
-    console.log('📩 [appointment.UpdateStatus] Event nhận được:', payload);
-
     const { clientId, partnerId, appointment } = payload;
 
     if (partnerId) {
@@ -173,6 +164,12 @@ export class AppGateway
       .emit('appointment.updateComplete', appointment);
   }
 
+  @OnEvent('appointment.updateToCancel')
+  handleAppointmentCancel(payload) {
+    const { clientId } = payload;
+    this.server.to(`client_${clientId}`).emit('appointment.updateToCancel');
+  }
+
   @OnEvent('location.update')
   handlePartnerLocationUpdate(payload: {
     clientId: string;
@@ -189,13 +186,8 @@ export class AppGateway
         latitude: payload.latitude,
         longitude: payload.longitude,
       });
-
-    console.log(`📤 Emitted location to client_${payload.clientId}:`, {
-      partnerId: payload.partnerId,
-      latitude: payload.latitude,
-      longitude: payload.longitude,
-    });
   }
+
   @OnEvent('transaction.topUpSuccess')
   handleTopUpSuccess(payload: {
     userId: string;
@@ -203,8 +195,6 @@ export class AppGateway
     newBalance: number;
     timestamp: number;
   }) {
-    this.logger.log('💰 [transaction.topUpSuccess] Event nhận được:', payload);
-
     const { userId, amount, newBalance, timestamp } = payload;
     this.server.to(`partner_${userId}`).emit('transaction.top_up.success', {
       amount,
@@ -212,9 +202,6 @@ export class AppGateway
       timestamp,
       message: 'Nạp tiền thành công!',
     });
-    this.logger.log(
-      `✅ Đã emit 'topup_success' tới partner_${userId} - Số dư mới: ${newBalance}`,
-    );
   }
 
   @OnEvent('transaction.paid_appointment.success')
@@ -227,11 +214,6 @@ export class AppGateway
   }) {
     const { appointmentId, clientId, partnerId, amount, timestamp } = payload;
 
-    this.logger.log(
-      '💰 [transaction.paid_appointment.success] Event nhận được:',
-      payload,
-    );
-
     this.server
       .to(`partner_${partnerId}`)
       .emit('transaction.paid_appointment.success', {
@@ -240,5 +222,165 @@ export class AppGateway
         timestamp,
         message: 'Thanh toán hoàn tất!',
       });
+  }
+
+  @SubscribeMessage('call.request')
+  handleCallRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    this.logger.log(
+      `📞 Received call.request from ${client.id}: ${JSON.stringify(payload)}`,
+    );
+
+    const {
+      role_Call,
+      from_userId,
+      form_name,
+      form_avatar,
+      to_userId,
+      to_name,
+      to_avatar,
+    } = payload;
+
+    if (!to_userId || !from_userId) {
+      this.logger.warn('⚠️ call.request missing required fields');
+      return;
+    }
+
+    if (role_Call === 'client') {
+      this.logger.log(`📤 Client ${from_userId} gọi tới Partner ${to_userId}`);
+      this.server.to(`partner_${to_userId}`).emit('call.incoming', payload);
+    } else if (role_Call === 'partner') {
+      this.logger.log(`📤 Partner ${from_userId} gọi tới Client ${to_userId}`);
+      this.server.to(`client_${to_userId}`).emit('call.incoming', payload);
+    } else {
+      this.logger.warn(`⚠️ Unknown role_Call: ${role_Call}`);
+    }
+  }
+
+  @SubscribeMessage('call.request_cancel')
+  handleCallRequestCancel(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    const { to, role } = payload;
+    if (role === 'client') {
+      this.logger.log(`📤 Client gọi tới Partner ${to}`);
+      this.server.to(`partner_${to}`).emit('call.request_cancel', {});
+    } else if (role === 'partner') {
+      this.logger.log(`📤 Partner gọi tới Client ${to}`);
+      this.server.to(`client_${to}`).emit('call.request_cancel', {});
+    } else {
+      this.logger.warn(`⚠️ Unknown role_Call: ${role}`);
+    }
+  }
+
+  @SubscribeMessage('call.decline')
+  handleDeclineCall(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    const { to, role } = payload;
+    this.logger.log(
+      `📞 call.decline from ${client.id}: ${JSON.stringify(payload)}`,
+    );
+    if (role === 'client') {
+      this.logger.log(`📤 Client gọi tới Partner ${to}`);
+      this.server.to(`partner_${to}`).emit('call.declined', {});
+    } else if (role === 'partner') {
+      this.logger.log(`📤 Partner gọi tới Client ${to}`);
+      this.server.to(`client_${to}`).emit('call.declined', {});
+    } else {
+      this.logger.warn(`⚠️ Unknown role_Call: ${role}`);
+    }
+  }
+
+  @SubscribeMessage('call.accept')
+  handleCallAccept(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    const { from_userId, to_userId, to_role } = payload;
+
+    this.logger.log(
+      `📞 call.accept from ${from_userId} (to_role=${to_role}) -> to ${to_userId}`,
+    );
+
+    if (!from_userId || !to_userId) {
+      this.logger.warn(
+        `⚠️ Invalid call.accept payload: ${JSON.stringify(payload)}`,
+      );
+      return;
+    }
+
+    if (to_role === 'partner') {
+      this.server.to(`partner_${to_userId}`).emit('call.accepted', {
+        from_userId,
+        to_userId,
+        to_role,
+        timestamp: new Date(),
+      });
+    } else if (to_role === 'client') {
+      this.server.to(`client_${to_userId}`).emit('call.accepted', {
+        from_userId,
+        to_userId,
+        to_role,
+        timestamp: new Date(),
+      });
+    } else {
+      this.logger.warn(`⚠️ Unknown role in call.accept: ${to_role}`);
+    }
+  }
+
+  @SubscribeMessage('call.end')
+  handleCallEnd(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: any,
+  ) {
+    const { from_userId, to_userId } = payload;
+    this.server.to(`client_${from_userId}`).emit('call.ended', payload);
+    this.server.to(`client_${to_userId}`).emit('call.ended', payload);
+    this.server.to(`partner_${from_userId}`).emit('call.ended', payload);
+    this.server.to(`partner_${to_userId}`).emit('call.ended', payload);
+  }
+
+  @SubscribeMessage('webrtc.offer')
+  handleOffer(client: Socket, payload: any) {
+    console.log('📡 Offer từ', payload.from_userId, '->', payload.to_userId);
+    this.server
+      .to(`partner_${payload.to_userId}`)
+      .emit('webrtc.offer', payload);
+  }
+
+  @SubscribeMessage('webrtc.answer')
+  handleAnswer(client: Socket, payload: any) {
+    console.log('📡 Answer từ', payload.from_userId, '->', payload.to_userId);
+    this.server
+      .to(`client_${payload.to_userId}`)
+      .emit('webrtc.answer', payload);
+  }
+
+  @SubscribeMessage('webrtc.ice-candidate')
+  handleIceCandidate(client: Socket, payload: any) {
+    this.logger.log(`webrtc.ice-candidate ${JSON.stringify(payload)}`);
+
+    const { to_userId, candidate, to_role } = payload;
+
+    if (to_role === 'partner') {
+      this.server
+        .to(`partner_${to_userId}`)
+        .emit('webrtc.ice-candidate', payload);
+    } else if (to_role === 'client') {
+      this.server
+        .to(`client_${to_userId}`)
+        .emit('webrtc.ice-candidate', payload);
+    } else {
+      this.logger.warn(`⚠️ Unknown role in call.accept: ${to_role}`);
+    }
+
+    this.server
+      .to(`client_${payload.to_userId}`)
+      .emit('webrtc.ice-candidate', payload);
   }
 }

@@ -70,6 +70,10 @@ export class AppointmentController {
   getById(@Param('id') id: string) {
     return this.appointmentService.getById(id);
   }
+  @Post(':id/cancel')
+  async cancelAppointment(@Param('id') id: string, @Body() dto: any) {
+    return this.appointmentService.updateToCancel(id, dto.reason);
+  }
 
   @Get('order/:orderId')
   getByOrderId(@Param('orderId') orderId: string) {

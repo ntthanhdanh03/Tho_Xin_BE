@@ -291,6 +291,25 @@ export class AppointmentService {
     return updated;
   }
 
+  async updateToCancel(id: string, reason: string): Promise<Appointment> {
+    const updated = await this.appointmentModel
+      .findByIdAndUpdate(
+        id,
+        {
+          status: AppointmentStatus.CANCELLED,
+          cancelReason: reason,
+        },
+        { new: true },
+      )
+      .exec();
+
+    this.eventEmitter.emit('appointment.updateToCancel', {
+      clientId: updated?.clientId,
+    });
+
+    return updated;
+  }
+
   async getById(id: string): Promise<Appointment> {
     const appointment = await this.appointmentModel
       .findById(id)

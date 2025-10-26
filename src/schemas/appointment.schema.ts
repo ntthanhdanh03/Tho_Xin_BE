@@ -45,6 +45,9 @@ export class Appointment {
   @Prop({ type: Number, default: 0 })
   finalAmount: number;
 
+  @Prop({ type: String, default: '' })
+  cancelReason?: string;
+
   @Prop({
     type: {
       note: { type: String, default: '' },
