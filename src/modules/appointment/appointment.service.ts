@@ -304,7 +304,7 @@ export class AppointmentService {
       .exec();
 
     this.eventEmitter.emit('appointment.updateToCancel', {
-      clientId: updated?.clientId,
+      appointment: updated,
     });
 
     return updated;

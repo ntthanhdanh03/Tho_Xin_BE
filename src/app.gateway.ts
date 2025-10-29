@@ -33,14 +33,13 @@ export class AppGateway
 
   constructor(private readonly userService: UserService) {}
 
+  // ==================== LIFECYCLE HOOKS ====================
+
   afterInit(server: Server) {
     this.logger.log('🚀 WebSocket Gateway initialized');
     server.engine.on('connection_error', (err) => {
       this.logger.error(
-        '❌ Connection error:',
-        err.req?.url,
-        err.code,
-        err.message,
+        `❌ Connection error: ${err.req?.url} | Code: ${err.code} | Message: ${err.message}`,
       );
     });
   }
@@ -50,12 +49,14 @@ export class AppGateway
       const userId = client.handshake.query.userId as string;
       const type = client.handshake.query.type as 'partner' | 'client';
 
-      this.logger.log(`   - Socket ID: ${client.id}`);
-      this.logger.log(`   - User ID: ${userId}`);
-      this.logger.log(`   - Type: ${type}`);
+      this.logger.log(
+        `🔌 New connection | Socket: ${client.id} | User: ${userId} | Type: ${type}`,
+      );
 
       if (!userId || !type) {
-        this.logger.warn('⚠️ Connection missing userId or type');
+        this.logger.warn(
+          `⚠️ Connection rejected | Socket: ${client.id} | Missing userId or type`,
+        );
         return;
       }
 
@@ -64,14 +65,16 @@ export class AppGateway
 
       if (type === 'partner') {
         await this.userService.updatePartnerProfile(userId, { isOnline: true });
-        this.logger.log(`✅ Partner ${userId} is now online`);
         client.join(`partner_${userId}`);
+        this.logger.log(`✅ Partner online | User: ${userId}`);
       } else if (type === 'client') {
-        this.logger.log(`✅ Client ${userId} connected`);
         client.join(`client_${userId}`);
+        this.logger.log(`✅ Client connected | User: ${userId}`);
       }
     } catch (error) {
-      this.logger.error('❌ Error in handleConnection:', error);
+      this.logger.error(
+        `❌ Connection error | Socket: ${client.id} | Error: ${error.message}`,
+      );
     }
   }
 
@@ -79,22 +82,32 @@ export class AppGateway
     try {
       const { userId, type } = client.data;
 
-      this.logger.log(`🔌 Disconnection: Socket ID ${client.id}, Type ${type}`);
+      this.logger.log(
+        `🔌 Disconnection | Socket: ${client.id} | User: ${userId} | Type: ${type}`,
+      );
 
       if (type === 'partner' && userId) {
         await this.userService.updatePartnerProfile(userId, {
           isOnline: false,
         });
-        this.logger.log(`❌ Partner ${userId} is now offline`);
+        this.logger.log(`❌ Partner offline | User: ${userId}`);
       }
     } catch (error) {
-      this.logger.error('❌ Error in handleDisconnect:', error);
+      this.logger.error(
+        `❌ Disconnection error | Socket: ${client.id} | Error: ${error.message}`,
+      );
     }
   }
+
+  // ==================== ORDER EVENTS ====================
 
   @OnEvent('order.created')
   handleNewOrder(payload: { order: OrderDocument; onlineUserIds: string[] }) {
     const { order, onlineUserIds } = payload;
+    this.logger.log(
+      `📦 New order created | Order: ${order._id} | Notifying ${onlineUserIds.length} partners`,
+    );
+
     onlineUserIds.forEach((profileId) => {
       const id = profileId.toString ? profileId.toString() : profileId;
       this.server.to(`partner_${id}`).emit('new_order', order);
@@ -104,33 +117,42 @@ export class AppGateway
   @OnEvent('order.addApplicant')
   handleAddApplicant(payload: { clientId: string[] }) {
     const { clientId } = payload;
+    this.logger.log(`📝 Add applicant | Client: ${clientId}`);
     this.server.to(`client_${clientId}`).emit('order_addApplicant', clientId);
   }
 
   @OnEvent('order.selectApplicant')
   handleSelectApplicant(payload: { partnerId: string; appointment: string }) {
     const { partnerId, appointment } = payload;
+    this.logger.log(
+      `✅ Applicant selected | Partner: ${partnerId} | Appointment: ${appointment}`,
+    );
     this.server
       .to(`partner_${partnerId}`)
       .emit('select_applicant', appointment);
   }
 
+  // ==================== CHAT EVENTS ====================
+
   @OnEvent('chat.sendMessage')
   handleSendMessage(dto: SendMessageDto) {
     const { roomId, receiverId, senderType, orderId } = dto;
-
     const receiverRoom =
       senderType === 'client'
         ? `partner_${receiverId}`
         : `client_${receiverId}`;
 
-    const messagePayload = {
+    this.logger.log(
+      `💬 New message | Room: ${roomId} | To: ${receiverId} (${senderType === 'client' ? 'partner' : 'client'})`,
+    );
+
+    this.server.to(receiverRoom).emit('chat.newMessage', {
       roomId,
       orderId,
-    };
-
-    this.server.to(receiverRoom).emit('chat.newMessage', messagePayload);
+    });
   }
+
+  // ==================== APPOINTMENT EVENTS ====================
 
   @OnEvent('appointment.UpdateStatus')
   handleAppointmentUpdate(payload: {
@@ -144,21 +166,23 @@ export class AppGateway
       this.server
         .to(`partner_${partnerId}`)
         .emit('appointment_updated', appointment);
-      console.log(`✅ Đã emit tới partner_${partnerId}`);
+      this.logger.log(`📅 Appointment updated | Partner: ${partnerId}`);
     }
 
     if (clientId) {
       this.server
         .to(`client_${clientId}`)
         .emit('appointment_updated', appointment);
-      console.log(`✅ Đã emit tới client_${clientId}`);
+      this.logger.log(`📅 Appointment updated | Client: ${clientId}`);
     }
   }
 
   @OnEvent('appointment.updateComplete')
   handleAppointmentComplete(payload) {
     const { appointment } = payload;
-
+    this.logger.log(
+      `✅ Appointment completed | Client: ${appointment.clientId}`,
+    );
     this.server
       .to(`client_${appointment.clientId}`)
       .emit('appointment.updateComplete', appointment);
@@ -166,9 +190,14 @@ export class AppGateway
 
   @OnEvent('appointment.updateToCancel')
   handleAppointmentCancel(payload) {
-    const { clientId } = payload;
-    this.server.to(`client_${clientId}`).emit('appointment.updateToCancel');
+    const clientId = payload?.appointment?.clientId;
+    this.logger.log(`❌ Appointment cancelled | Client: ${clientId}`);
+    this.server
+      .to(`client_${clientId}`)
+      .emit('appointment.updateToCancel', payload.appointment);
   }
+
+  // ==================== LOCATION EVENTS ====================
 
   @OnEvent('location.update')
   handlePartnerLocationUpdate(payload: {
@@ -177,7 +206,9 @@ export class AppGateway
     latitude: number;
     longitude: number;
   }) {
-    console.log('📡 Received location update event:', payload);
+    this.logger.log(
+      `📍 Location update | Partner: ${payload.partnerId} → Client: ${payload.clientId}`,
+    );
 
     this.server
       .to(`client_${payload.clientId}`)
@@ -188,6 +219,8 @@ export class AppGateway
       });
   }
 
+  // ==================== TRANSACTION EVENTS ====================
+
   @OnEvent('transaction.topUpSuccess')
   handleTopUpSuccess(payload: {
     userId: string;
@@ -196,6 +229,10 @@ export class AppGateway
     timestamp: number;
   }) {
     const { userId, amount, newBalance, timestamp } = payload;
+    this.logger.log(
+      `💰 Top-up success | User: ${userId} | Amount: ${amount} | New balance: ${newBalance}`,
+    );
+
     this.server.to(`partner_${userId}`).emit('transaction.top_up.success', {
       amount,
       newBalance,
@@ -213,6 +250,9 @@ export class AppGateway
     timestamp: number;
   }) {
     const { appointmentId, clientId, partnerId, amount, timestamp } = payload;
+    this.logger.log(
+      `💳 Payment success | Appointment: ${appointmentId} | Partner: ${partnerId} | Amount: ${amount}`,
+    );
 
     this.server
       .to(`partner_${partnerId}`)
@@ -224,15 +264,13 @@ export class AppGateway
       });
   }
 
+  // ==================== CALL HANDLING ====================
+
   @SubscribeMessage('call.request')
   handleCallRequest(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: any,
   ) {
-    this.logger.log(
-      `📞 Received call.request from ${client.id}: ${JSON.stringify(payload)}`,
-    );
-
     const {
       role_Call,
       from_userId,
@@ -244,15 +282,19 @@ export class AppGateway
     } = payload;
 
     if (!to_userId || !from_userId) {
-      this.logger.warn('⚠️ call.request missing required fields');
+      this.logger.warn(
+        `⚠️ Invalid call.request | Socket: ${client.id} | Missing userId`,
+      );
       return;
     }
 
+    this.logger.log(
+      `📞 Call request | From: ${from_userId} (${role_Call}) → To: ${to_userId}`,
+    );
+
     if (role_Call === 'client') {
-      this.logger.log(`📤 Client ${from_userId} gọi tới Partner ${to_userId}`);
       this.server.to(`partner_${to_userId}`).emit('call.incoming', payload);
     } else if (role_Call === 'partner') {
-      this.logger.log(`📤 Partner ${from_userId} gọi tới Client ${to_userId}`);
       this.server.to(`client_${to_userId}`).emit('call.incoming', payload);
     } else {
       this.logger.warn(`⚠️ Unknown role_Call: ${role_Call}`);
@@ -265,14 +307,14 @@ export class AppGateway
     @MessageBody() payload: any,
   ) {
     const { to, role } = payload;
+    this.logger.log(`📞 Call cancelled | To: ${to} | Role: ${role}`);
+
     if (role === 'client') {
-      this.logger.log(`📤 Client gọi tới Partner ${to}`);
       this.server.to(`partner_${to}`).emit('call.request_cancel', {});
     } else if (role === 'partner') {
-      this.logger.log(`📤 Partner gọi tới Client ${to}`);
       this.server.to(`client_${to}`).emit('call.request_cancel', {});
     } else {
-      this.logger.warn(`⚠️ Unknown role_Call: ${role}`);
+      this.logger.warn(`⚠️ Unknown role: ${role}`);
     }
   }
 
@@ -282,17 +324,14 @@ export class AppGateway
     @MessageBody() payload: any,
   ) {
     const { to, role } = payload;
-    this.logger.log(
-      `📞 call.decline from ${client.id}: ${JSON.stringify(payload)}`,
-    );
+    this.logger.log(`📞 Call declined | To: ${to} | Role: ${role}`);
+
     if (role === 'client') {
-      this.logger.log(`📤 Client gọi tới Partner ${to}`);
-      this.server.to(`partner_${to}`).emit('call.declined', {});
-    } else if (role === 'partner') {
-      this.logger.log(`📤 Partner gọi tới Client ${to}`);
       this.server.to(`client_${to}`).emit('call.declined', {});
+    } else if (role === 'partner') {
+      this.server.to(`partner_${to}`).emit('call.declined', {});
     } else {
-      this.logger.warn(`⚠️ Unknown role_Call: ${role}`);
+      this.logger.warn(`⚠️ Unknown role: ${role}`);
     }
   }
 
@@ -303,33 +342,34 @@ export class AppGateway
   ) {
     const { from_userId, to_userId, to_role } = payload;
 
-    this.logger.log(
-      `📞 call.accept from ${from_userId} (to_role=${to_role}) -> to ${to_userId}`,
-    );
-
     if (!from_userId || !to_userId) {
       this.logger.warn(
-        `⚠️ Invalid call.accept payload: ${JSON.stringify(payload)}`,
+        `⚠️ Invalid call.accept | Payload: ${JSON.stringify(payload)}`,
       );
       return;
     }
 
+    this.logger.log(
+      `📞 Call accepted | From: ${from_userId} → To: ${to_userId} (${to_role})`,
+    );
+
+    const acceptPayload = {
+      from_userId,
+      to_userId,
+      to_role,
+      timestamp: new Date(),
+    };
+
     if (to_role === 'partner') {
-      this.server.to(`partner_${to_userId}`).emit('call.accepted', {
-        from_userId,
-        to_userId,
-        to_role,
-        timestamp: new Date(),
-      });
+      this.server
+        .to(`partner_${to_userId}`)
+        .emit('call.accepted', acceptPayload);
     } else if (to_role === 'client') {
-      this.server.to(`client_${to_userId}`).emit('call.accepted', {
-        from_userId,
-        to_userId,
-        to_role,
-        timestamp: new Date(),
-      });
+      this.server
+        .to(`client_${to_userId}`)
+        .emit('call.accepted', acceptPayload);
     } else {
-      this.logger.warn(`⚠️ Unknown role in call.accept: ${to_role}`);
+      this.logger.warn(`⚠️ Unknown to_role: ${to_role}`);
     }
   }
 
@@ -339,33 +379,48 @@ export class AppGateway
     @MessageBody() payload: any,
   ) {
     const { from_userId, to_userId } = payload;
+    this.logger.log(`📞 Call ended | From: ${from_userId} | To: ${to_userId}`);
+
     this.server.to(`client_${from_userId}`).emit('call.ended', payload);
     this.server.to(`client_${to_userId}`).emit('call.ended', payload);
     this.server.to(`partner_${from_userId}`).emit('call.ended', payload);
     this.server.to(`partner_${to_userId}`).emit('call.ended', payload);
   }
 
+  // ==================== WEBRTC SIGNALING ====================
+
   @SubscribeMessage('webrtc.offer')
   handleOffer(client: Socket, payload: any) {
-    console.log('📡 Offer từ', payload.from_userId, '->', payload.to_userId);
-    this.server
-      .to(`partner_${payload.to_userId}`)
-      .emit('webrtc.offer', payload);
+    const { to_userId, to_role } = payload;
+    this.logger.log(`🔄 WebRTC offer | To: ${to_userId} (${to_role})`);
+
+    if (to_role === 'partner') {
+      this.server.to(`partner_${to_userId}`).emit('webrtc.offer', payload);
+    } else if (to_role === 'client') {
+      this.server.to(`client_${to_userId}`).emit('webrtc.offer', payload);
+    } else {
+      this.logger.warn(`⚠️ Unknown to_role: ${to_role}`);
+    }
   }
 
   @SubscribeMessage('webrtc.answer')
   handleAnswer(client: Socket, payload: any) {
-    console.log('📡 Answer từ', payload.from_userId, '->', payload.to_userId);
-    this.server
-      .to(`client_${payload.to_userId}`)
-      .emit('webrtc.answer', payload);
+    const { to_userId, to_role } = payload;
+    this.logger.log(`🔄 WebRTC answer | To: ${to_userId} (${to_role})`);
+
+    if (to_role === 'partner') {
+      this.server.to(`partner_${to_userId}`).emit('webrtc.answer', payload);
+    } else if (to_role === 'client') {
+      this.server.to(`client_${to_userId}`).emit('webrtc.answer', payload);
+    } else {
+      this.logger.warn(`⚠️ Unknown to_role: ${to_role}`);
+    }
   }
 
   @SubscribeMessage('webrtc.ice-candidate')
   handleIceCandidate(client: Socket, payload: any) {
-    this.logger.log(`webrtc.ice-candidate ${JSON.stringify(payload)}`);
-
-    const { to_userId, candidate, to_role } = payload;
+    const { to_userId, to_role } = payload;
+    this.logger.log(`🔄 WebRTC ICE candidate | To: ${to_userId} (${to_role})`);
 
     if (to_role === 'partner') {
       this.server
@@ -376,11 +431,7 @@ export class AppGateway
         .to(`client_${to_userId}`)
         .emit('webrtc.ice-candidate', payload);
     } else {
-      this.logger.warn(`⚠️ Unknown role in call.accept: ${to_role}`);
+      this.logger.warn(`⚠️ Unknown to_role: ${to_role}`);
     }
-
-    this.server
-      .to(`client_${payload.to_userId}`)
-      .emit('webrtc.ice-candidate', payload);
   }
 }
